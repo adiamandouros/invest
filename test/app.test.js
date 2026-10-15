@@ -2,6 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server/app.js';
 import { assetVersion, escapeHtml, renderPages } from '../server/pages.js';
+import { VERSION } from '../server/version.js';
 
 let server;
 let base;
@@ -29,7 +30,7 @@ test('pages are sent with security headers and kept out of search engines', asyn
 test('/health says when the database isn\'t configured', async () => {
     const res = await get('/health');
     assert.equal(res.status, 503);
-    assert.deepEqual(await res.json(), { status: 'degraded', db: 'not configured' });
+    assert.deepEqual(await res.json(), { status: 'degraded', db: 'not configured', version: VERSION });
 });
 
 test('/health reports a database that answers, and one that doesn\'t', async () => {
@@ -44,12 +45,19 @@ test('/health reports a database that answers, and one that doesn\'t', async () 
         try {
             const res = await fetch(`http://localhost:${s.address().port}/health`);
             assert.equal(res.status, status);
-            assert.deepEqual(await res.json(), body);
+            assert.deepEqual(await res.json(), { ...body, version: VERSION });
         } finally {
             console.error = errors;
             s.close();
         }
     }
+});
+
+test('the version is the commit the app runs from', async () => {
+    const { execFileSync } = await import('child_process');
+    const { readVersion } = await import('../server/version.js');
+    assert.equal(VERSION, execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' }).trim());
+    assert.equal(readVersion('/nonexistent'), null);
 });
 
 test('every linked stylesheet, script and icon is versioned and served', async () => {

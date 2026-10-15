@@ -8,6 +8,7 @@ import { createMarketUpdater } from './market/update.js';
 import { createRenderer, messagePage, PAGES, PUBLIC_DIR, VENDOR, view } from './pages.js';
 import { createPortfolio } from './portfolio/index.js';
 import { securityHeaders } from './security.js';
+import { VERSION } from './version.js';
 
 // LiteSpeed is the only proxy in front of the app. Trust it, the nearest hop,
 // when it connects over loopback or over a socket file (no address), so
@@ -33,12 +34,13 @@ export function createApp({
     const send = (res, status, html) => res.status(status).set('Cache-Control', 'no-store').type('html').send(html);
     const message = ({ title, text }) => messagePage(render, { title, text });
 
-    // For uptime checks: whether the app runs and reaches its database
+    // For uptime checks: whether the app runs and reaches its database, and
+    // which commit it runs (scripts/deploy.sh checks that it's the new one)
     app.get('/health', async (_req, res) => {
         const dbStatus = db ? await checkDb(db) : 'not configured';
         res.set('Cache-Control', 'no-store')
             .status(dbStatus === 'ok' ? 200 : 503)
-            .json({ status: dbStatus === 'ok' ? 'ok' : 'degraded', db: dbStatus });
+            .json({ status: dbStatus === 'ok' ? 'ok' : 'degraded', db: dbStatus, version: VERSION });
     });
 
     // Stylesheets, scripts, icons and robots.txt: public, nothing private in them
