@@ -59,7 +59,7 @@ export const view = name => readFileSync(join(VIEWS_DIR, `${name}.html`), 'utf8'
 
 // The signed-in part of the header: page links and the sign-out button
 const NAV = [
-    ['/', 'Overview'], ['/holdings', 'Holdings'], ['/p2p', 'P2P'], ['/transactions', 'Transactions'],
+    ['/', 'Overview'], ['/holdings', 'Holdings'], ['/p2p', 'P2P'], ['/allocation', 'Allocation'], ['/transactions', 'Transactions'],
     ['/instruments', 'Instruments'], ['/accounts', 'Accounts'], ['/import', 'Import'],
 ];
 

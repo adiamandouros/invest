@@ -171,3 +171,46 @@ export function parseBalance(body, accountId) {
     const notes = text(body.notes).slice(0, 500) || null;
     return { errors, values: { accountId, date, value, cash, notes } };
 }
+
+// The allocation form: group rows name<i>, target<i>, id<i> (blank name = no
+// group, or delete it), and a group for each holding, group-<key> where key is
+// i<instrument id> or a<account id>. `groups`: the saved ones; `holdings`: [{ key }].
+export function parseAllocation(body, { groups, holdings }) {
+    const errors = {};
+    const list = [];
+    for (let i = 0; body[`name${i}`] !== undefined; i++) {
+        const name = text(body[`name${i}`]);
+        const id = Number(body[`id${i}`]) || null;
+        if (id && !groups.some(g => g.id === id)) continue;
+        if (!name) continue;
+        if (name.length > 50) errors[`name${i}`] = 'Use at most 50 characters.';
+        else if (list.some(g => g.name.toLowerCase() === name.toLowerCase())) errors[`name${i}`] = 'Another group has this name.';
+        let target = null;
+        try {
+            target = number(body[`target${i}`]);
+        } catch {
+            // reported below
+        }
+        if (target === null || target < 0n || target > dec('100')) errors[`target${i}`] = 'Enter a percentage from 0 to 100.';
+        list.push({ id, name, targetPct: target === null ? null : plain(target), row: i });
+    }
+    if (!list.length) errors.name0 = 'Enter at least one group.';
+    else if (!Object.keys(errors).length) {
+        const sum = list.reduce((total, g) => total + dec(g.targetPct), 0n);
+        if (sum !== dec('100')) errors.total = `The targets add up to ${plain(sum)}%; make them add up to 100%.`;
+    }
+    const removed = groups.filter(g => !list.some(x => x.id === g.id)).map(g => g.id);
+    const groupOf = key => {
+        const id = Number(body[`group-${key}`]) || null;
+        return id && list.some(g => g.id === id) ? id : null;
+    };
+    return {
+        errors,
+        values: {
+            groups: list.map(({ id, name, targetPct }) => ({ id, name, targetPct })),
+            removed,
+            instruments: holdings.filter(h => h.key.startsWith('i')).map(h => [Number(h.key.slice(1)), groupOf(h.key)]),
+            accounts: holdings.filter(h => h.key.startsWith('a')).map(h => [Number(h.key.slice(1)), groupOf(h.key)]),
+        },
+    };
+}
