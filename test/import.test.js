@@ -103,7 +103,7 @@ test('unknown rows are reported, and wrong files are refused', () => {
     report.cash_in_outs.push({ id: 999, currency: 'USD', type: 'mystery', datetime: '2025-01-01', amount: '1', offbalance: null });
     assert.match(parseStatement(JSON.stringify(report)).warnings[0], /Cash row 999: unknown type "mystery"/);
     assert.throws(() => parseStatement('not json'), /isn't a statement the app can read/);
-    assert.throws(() => parseStatement('{"hello": 1}'), /Freedom24 broker report \(JSON\) or a Mintos account statement \(CSV\)/);
+    assert.throws(() => parseStatement('{"hello": 1}'), /Freedom24 broker report \(JSON\), Mintos account statements \(CSV\) or PeerBerry transactions \(Excel\)/);
 });
 
 test('multipart forms are read into fields and files', () => {

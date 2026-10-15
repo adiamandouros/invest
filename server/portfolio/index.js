@@ -306,12 +306,12 @@ export function createPortfolio({ data, market = null, render, send, message, no
         }
         if (!sameString(parsed.fields._csrf, req.session.csrf)) return forbidden(res);
         const fail = error => page(req, res, 'Import', importContent({ csrf: req.session.csrf, error }), 400);
-        const file = parsed.files.statement;
-        if (!file?.data.length) return fail('Choose a report file to upload.');
+        const files = (parsed.uploads.statement ?? []).filter(f => f.data.length);
+        if (!files.length) return fail('Choose a statement file to upload.');
 
         let statement;
         try {
-            statement = parseStatement(file.data.toString('utf8'));
+            statement = parseStatement(files.map(f => f.data));
         } catch (err) {
             return fail(err.message);
         }

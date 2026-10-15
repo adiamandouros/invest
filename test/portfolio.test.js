@@ -77,7 +77,7 @@ test('uploads need the form token and a readable report', async () => {
         assert.equal((await b.post('/import/preview', upload('wrong'))).status, 403);
         const bad = await b.post('/import/preview', upload(csrf, '{"not": "a report"}'));
         assert.equal(bad.status, 400);
-        assert.match(await bad.text(), /a Freedom24 broker report \(JSON\) or a Mintos account statement \(CSV\)/);
+        assert.match(await bad.text(), /Mintos account statements \(CSV\) or PeerBerry transactions \(Excel\)/);
         assert.equal((await b.post('/import/confirm', { _csrf: csrf, id: 'nope' })).status, 410);
     } finally {
         app.close();
