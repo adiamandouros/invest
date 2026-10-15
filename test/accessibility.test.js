@@ -18,6 +18,7 @@ import { reportsContent, yearContent } from '../server/portfolio/reports-views.j
 import { dashboardContent, dashboardNotices } from '../server/portfolio/dashboard-views.js';
 import { project } from '../server/lib/projection.js';
 import { projectionContent } from '../server/portfolio/projection-views.js';
+import { exportContent } from '../server/portfolio/export-views.js';
 import { allocationContent, allocationForm } from '../server/portfolio/allocation-views.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from '../server/portfolio/p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
@@ -102,6 +103,7 @@ const all = {
         }),
     })),
     '/ (overview, empty)': page('Overview', dashboardContent({ total: {}, year: null, series: [], income: [], groups: null })),
+    '/export': page('Export your data', exportContent({ counts: { accounts: 2, transactions: 40, prices: 1 } })),
     '/projection': page('Projection', projectionContent({
         history: reports.groupHistory(), thisYear: 2026, split: 'by your targets: P2P lending 100%',
         values: { years: '3', monthly: '100', 'rate-1': '7' },
