@@ -20,9 +20,8 @@ async function migrateOnStart() {
     }
 }
 
-// No top-level await in this file: LiteSpeed starts the app with require(),
-// which Node refuses for modules that await at the top level, and the app
-// would then never answer (test/startup.test.js checks this).
+// No top-level await in this file: on Node versions that load it with
+// require() it would fail with ERR_REQUIRE_ASYNC_MODULE (see start.cjs).
 const db = config.db ? createDb(config.db) : null;
 if (!db) console.warn(`[db] Not configured: set ${config.missingDbVars.join(', ')} (see .env.example)`);
 

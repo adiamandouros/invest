@@ -31,7 +31,7 @@ First-time setup:
 
 1. **MySQL Databases:** create the database and a user, and give the user *All privileges* on it. cPanel prefixes both names with `sonovabi_`.
 2. **Git Version Control → Create:** clone this repository into `~/invest.sonovabitc.win` (the subdomain's folder; it must be empty).
-3. **Setup Node.js App → Create:** Node.js 20, mode *Production*, application root `invest.sonovabitc.win`, URL `invest.sonovabitc.win`, startup file `server.js`. Add the environment variables `DB_NAME`, `DB_USER` and `DB_PASSWORD` (`DB_HOST` defaults to `localhost`). Then click *Run NPM Install* and *Restart*.
+3. **Setup Node.js App → Create:** Node.js 20, mode *Production*, application root `invest.sonovabitc.win`, URL `invest.sonovabitc.win`, startup file `start.cjs` (not `server.js`: LiteSpeed loads the startup file with `require()`, which Node 20 before 20.19 can't do for an ES module). Add the environment variables `DB_NAME`, `DB_USER` and `DB_PASSWORD` (`DB_HOST` defaults to `localhost`). Then click *Run NPM Install* and *Restart*.
 4. **SSL/TLS Status:** make sure AutoSSL covers `invest.sonovabitc.win`.
 5. Open https://invest.sonovabitc.win/health. It should show `{"status":"ok","db":"ok"}`.
 
