@@ -5,7 +5,7 @@ import { cash, positions } from '../server/lib/holdings.js';
 
 test('decimals are exact and round half away from zero', () => {
     assert.equal(dec('0.1') + dec('0.2'), dec('0.3'));
-    assert.equal(fixed(dec('1919.516305'), 2), '1919.52');
+    assert.equal(fixed(dec('1234.565001'), 2), '1234.57');
     assert.equal(fixed(dec('-0.005'), 2), '-0.01');
     assert.equal(fixed(dec('-0.004'), 2), '0.00', 'no "-0.00"');
     assert.equal(fixed(mul(dec('722.21'), dec('0.4')), 3), '288.884');
