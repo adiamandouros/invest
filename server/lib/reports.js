@@ -163,11 +163,37 @@ export function createReports({ transactions, accounts, instruments, balances, g
     const firstYear = firstDate ? Number(firstDate.slice(0, 4)) : null;
     const thisYear = Number(today.slice(0, 4));
     const yearEnd = year => (year === thisYear ? today : `${year}-12-31`);
+    const monthEnd = month => {
+        const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+        return end > today ? today : end;
+    };
+    // 'YYYY-MM' from the first row's month to today's
+    function months() {
+        if (!firstDate) return [];
+        const list = [];
+        for (let y = Number(firstDate.slice(0, 4)), m = Number(firstDate.slice(5, 7)); ; m++) {
+            if (m > 12) { y++; m = 1; }
+            const month = `${y}-${String(m).padStart(2, '0')}`;
+            if (month > today.slice(0, 7)) break;
+            list.push(month);
+        }
+        return list;
+    }
 
     return {
         firstDate,
         years: firstYear === null ? [] : Array.from({ length: thisYear - firstYear + 1 }, (_, i) => thisYear - i),
         year: year => ({ year, ...period(`${year - 1}-12-31`, yearEnd(year)) }),
+        // The value and the money put in at the end of each month (the last one ends today)
+        series: () => months().map(month => {
+            const s = snapshot(monthEnd(month));
+            return { month, date: s.date, valueEur: s.valueEur, investedEur: s.investedEur };
+        }),
+        // P2P interest, dividends and tax withheld per month, in EUR
+        income: () => months().map(month => {
+            const { interest, dividends, tax } = income(`${month}-00`, monthEnd(month));
+            return { month, interest, dividends, tax };
+        }),
         // Everything from before the first row to today, with the yearly rate (XIRR)
         total() {
             const all = period(firstDate ? `${Number(firstDate.slice(0, 4)) - 1}-12-31` : today, today);

@@ -14,7 +14,7 @@ const eur = (value, signed = false) => money(value, 'EUR', { signed });
 const pct = share => (share === null || share === undefined ? '—' : `${(share * 100).toFixed(1)}%`);
 const targetPct = g => `${(Number(g.targetPct)).toFixed(1).replace(/\.0$/, '')}%`;
 const json = data => `<script type="application/json" id="${data.id}-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
-const chart = (id, label, data) => `<div class="chart-box"><canvas id="${id}" data-chart="${id}-data" role="img" aria-label="${esc(label)}"></canvas></div>
+export const chart = (id, label, data) => `<div class="chart-box"><canvas id="${id}" data-chart="${id}-data" role="img" aria-label="${esc(label)}"></canvas></div>
 ${json({ id, ...data })}`;
 
 function summary(r, { xirr = false } = {}) {
@@ -55,7 +55,7 @@ function holdingsTable(id, heading, r) {
 }
 
 // The groups' shares on one day: a doughnut and its table
-function groupsNow(id, heading, shares) {
+export function groupsNow(id, heading, shares) {
     if (!shares.list.length) return '';
     const list = [...shares.list, ...(shares.other ? [{ name: 'Not in a group', value: shares.other, share: shares.otherShare, targetPct: null }] : [])];
     const rows = list.map(g => `            <tr>${td(esc(g.name))}${td(eur(g.value), true)}${td(pct(g.share), true)}${td(g.targetPct === null ? '—' : targetPct(g), true)}</tr>`).join('\n');

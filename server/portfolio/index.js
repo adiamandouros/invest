@@ -13,6 +13,7 @@ import {
 import { allocationContent, allocationForm } from './allocation-views.js';
 import { number, parseAccount, parseAllocation, parseBalance, parseInstrument, parseTransaction, transactionFields } from './forms.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from './p2p-views.js';
+import { dashboardContent, dashboardNotices } from './dashboard-views.js';
 import { CHART_SCRIPTS, reportsContent, yearContent, yearCsv, yearsCsv } from './reports-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
@@ -152,6 +153,29 @@ export function createPortfolio({ data, market = null, render, send, message, no
         if (!account || !/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) return next();
         await data.deleteBalance(account.id, req.params.date);
         res.redirect(303, `/p2p/${account.id}`);
+    });
+
+    // ── Overview ────────────────────────────────────────────────────────────
+
+    router.get('/', async (req, res) => {
+        const updating = market ? await market.refreshIfStale() || market.running : false;
+        const [r, { accounts, instruments, valuation }, status, groups, holdings, transactions] = await Promise.all([
+            reports(), valueAll(), data.marketStatus(), data.listGroups(), holdingsForAllocation(), data.listTransactions(),
+        ]);
+        const series = r.series();
+        const total = series.length ? r.total() : null;
+        const p2p = [...accounts.values()].filter(a => a.kind === 'p2p').map(account => ({
+            account, lastDate: transactions.filter(t => t.accountId === account.id).at(-1)?.date ?? null,
+        }));
+        const notices = dashboardNotices({
+            valuation, instruments, status, updating, p2p, today: today(),
+            unassigned: groups.length ? holdings.filter(h => !groups.some(g => g.id === h.groupId)) : [],
+        });
+        const content = dashboardContent({
+            total: valuation.total, year: series.length ? r.year(Number(today().slice(0, 4))) : null,
+            series, income: r.income(), groups: total?.groups ?? null, notices,
+        });
+        page(req, res, 'Overview', content, 200, series.length ? CHART_SCRIPTS : []);
     });
 
     // ── Reports ─────────────────────────────────────────────────────────────
