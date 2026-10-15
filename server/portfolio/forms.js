@@ -125,7 +125,12 @@ export function parseInstrument(body) {
     if (!CURRENCY.test(currency)) errors.currency = 'Enter a 3-letter currency code, like EUR or USD.';
     const distributing = { yes: true, no: false }[text(body.distributing)] ?? null;
     const assetClass = text(body.assetClass).slice(0, 50) || null;
-    return { errors, values: { symbol, name, isin, kind, currency, distributing, assetClass } };
+    const priceSource = text(body.priceSource) || 'yahoo';
+    if (!['yahoo', 'none'].includes(priceSource)) errors.priceSource = 'Choose where prices come from.';
+    // Empty: the app suggests one from the symbol when it first needs a price
+    const priceSymbol = text(body.priceSymbol).toUpperCase() || null;
+    if (priceSymbol && !/^[A-Z0-9^][A-Z0-9.^=\-]{0,31}$/.test(priceSymbol)) errors.priceSymbol = 'Enter the symbol as Yahoo Finance shows it, like VUAA.L.';
+    return { errors, values: { symbol, name, isin, kind, currency, distributing, assetClass, priceSymbol, priceSource } };
 }
 
 export function parseAccount(body) {

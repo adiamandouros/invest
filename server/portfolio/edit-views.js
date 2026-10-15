@@ -11,6 +11,7 @@ const LABELS = {
     amount: 'Amount', currency: 'Currency', fee: 'Fee', feeCurrency: 'Fee currency', fx: 'EUR rate', notes: 'Notes',
     symbol: 'Symbol', name: 'Name', isin: 'ISIN', kind: 'Kind', distributing: 'Dividends', assetClass: 'Asset class',
     platform: 'Platform', baseCurrency: 'Currency', openedOn: 'Opened on',
+    priceSource: 'Prices', priceSymbol: 'Yahoo Finance symbol',
 };
 
 function summary(errors) {
@@ -115,6 +116,7 @@ export function instrumentsContent({ instruments }) {
                 <td class="text-nowrap">${esc(i.isin ?? '—')}</td>
                 <td>${KIND_LABELS[i.kind]}</td>
                 <td>${i.distributing === null || i.distributing === undefined ? 'Not sure' : i.distributing ? 'Distributing' : 'Accumulating'}</td>
+                <td>${i.priceSource === 'none' ? 'None' : i.priceSymbol ? `Yahoo: ${esc(i.priceSymbol)}` : 'Yahoo (not set yet)'}</td>
                 <td><a href="/instruments/${i.id}/edit">Edit<span class="visually-hidden"> ${esc(i.symbol)}</span></a></td>
             </tr>`).join('\n');
     return `<h1 class="fs-3">Instruments</h1>
@@ -122,7 +124,7 @@ export function instrumentsContent({ instruments }) {
 ${instruments.length ? `<div class="table-responsive">
     <table class="table table-sm align-middle">
         <caption class="visually-hidden">Instruments</caption>
-        <thead><tr><th scope="col">Symbol</th><th scope="col">Name</th><th scope="col">ISIN</th><th scope="col">Kind</th><th scope="col">Dividends</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+        <thead><tr><th scope="col">Symbol</th><th scope="col">Name</th><th scope="col">ISIN</th><th scope="col">Kind</th><th scope="col">Dividends</th><th scope="col">Prices</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>
 ${rows}
         </tbody>
@@ -143,6 +145,11 @@ ${field('kind', f, { options: KINDS.map(k => [k, KIND_LABELS[k]]), required: tru
 ${field('currency', f, { attrs: currency, required: true, hint: 'The currency it trades in at your broker.' })}
 ${field('distributing', f, { options: DIVIDENDS })}
 ${field('assetClass', f, { hint: 'Optional, for allocation targets later: like Equity or Bonds.' })}
+${field('priceSource', f, { options: [['yahoo', 'Daily from Yahoo Finance'], ['none', 'None']] })}
+${field('priceSymbol', f, {
+        attrs: 'autocapitalize="characters" autocomplete="off"',
+        hint: 'As in the address of its page on finance.yahoo.com, like VUAA.L (London, USD) or VUAA.DE (Xetra, EUR). Leave it empty and the app guesses it from the symbol.',
+    })}
 ${buttons({ cancel: '/instruments' })}
 </form>`;
 }
@@ -150,7 +157,7 @@ ${buttons({ cancel: '/instruments' })}
 export const instrumentFields = i => ({
     symbol: i.symbol, name: i.name, isin: i.isin ?? '', kind: i.kind, currency: i.currency,
     distributing: i.distributing === null || i.distributing === undefined ? '' : i.distributing ? 'yes' : 'no',
-    assetClass: i.assetClass ?? '',
+    assetClass: i.assetClass ?? '', priceSource: i.priceSource ?? 'yahoo', priceSymbol: i.priceSymbol ?? '',
 });
 
 // ── Accounts ────────────────────────────────────────────────────────────────

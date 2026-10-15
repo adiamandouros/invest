@@ -46,33 +46,88 @@ const instrumentCell = i => `<a href="/transactions?instrument=${i.id}">${esc(i.
 
 const NOTHING_YET = `<p>Nothing recorded yet. <a href="/import">Import a broker statement</a> to start.</p>`;
 
-// `open`/`closed`: [{ instrument, position }]; `balances`: [{ account, currency, amount }]
-export function holdingsContent({ open, closed, balances }) {
-    if (!open.length && !closed.length && !balances.length) return `<h1 class="fs-3">Holdings</h1>\n${NOTHING_YET}`;
-    const openRows = open.map(({ instrument: i, position: p }) => `            <tr>
+// "+7.3% a year"; null → "—"
+export function percent(rate) {
+    if (rate === null || rate === undefined || !Number.isFinite(rate)) return '—';
+    const text = (rate * 100).toFixed(1);
+    return Number(text) === 0 ? '0.0%' : `${rate > 0 ? '+' : '−'}${text.replace('-', '')}%`;
+}
+
+const small = text => `<br><span class="small text-secondary-emphasis">${text}</span>`;
+
+// `valuation`: server/lib/valuation.js valuePortfolio(); `instruments`,
+// `accounts`: Maps by id; `status`: market_updates rows; `updating`: an update is running
+export function holdingsContent({ valuation: v, instruments, accounts, status = {}, updating = false, csrf }) {
+    if (!v.positions.length && !v.cash.length) return `<h1 class="fs-3">Holdings</h1>\n${NOTHING_YET}`;
+    const instrument = id => instruments.get(id);
+    const open = v.positions.filter(p => p.open).sort((a, b) => instrument(a.instrument).symbol.localeCompare(instrument(b.instrument).symbol));
+    const closed = v.positions.filter(p => !p.open).sort((a, b) => instrument(a.instrument).symbol.localeCompare(instrument(b.instrument).symbol));
+    const t = v.total;
+
+    const notices = [];
+    if (updating) notices.push('<div class="alert alert-info" role="status">Updating prices and exchange rates. Reload the page in a minute to see them.</div>');
+    const failed = Object.values(status).filter(s => !s.ok && s.message);
+    if (failed.length) notices.push(`<div class="alert alert-warning" role="alert">The last update had problems: ${failed.map(s => esc(s.message)).join('; ')}</div>`);
+    if (v.missingPrices.length) {
+        notices.push(`<div class="alert alert-warning" role="alert">No price yet for ${v.missingPrices.map(id => `<a href="/instruments/${id}/edit">${esc(instrument(id).symbol)}</a>`).join(', ')}, so the totals can't be worked out. Check its price symbol.</div>`);
+    }
+    const ageDays = v.pricesAsOf ? (Date.now() - Date.parse(`${v.pricesAsOf}T00:00:00Z`)) / 86_400_000 : 0;
+    if (ageDays > 5) notices.push(`<div class="alert alert-warning" role="alert">The newest prices are from ${esc(v.pricesAsOf)}, ${Math.floor(ageDays)} days ago.</div>`);
+
+    const summary = `<dl class="summary">
+    <div><dt>Value now</dt><dd>${money(t.valueEur, 'EUR')}</dd></div>
+    <div><dt>Put in</dt><dd>${money(t.investedEur, 'EUR')}</dd></div>
+    <div><dt>Gain</dt><dd>${money(t.gainEur, 'EUR', { signed: true })}</dd></div>
+    <div><dt>Return a year</dt><dd>${percent(t.xirr)}</dd></div>
+</dl>`;
+
+    const openRows = open.map(p => {
+        const i = instrument(p.instrument);
+        return `            <tr>
                 ${td(instrumentCell(i))}
                 ${td(units(p.units), true)}
-                ${td(p.units > 0n ? money(div(p.cost, p.units), p.currency) : '—', true)}
-                ${td(money(p.costEur, 'EUR'), true)}
+                ${td(p.price ? money(p.price.close, p.price.currency) + small(esc(p.price.date)) : '—', true)}
+                ${td(money(p.valueEur, 'EUR'), true)}
+                ${td(money(p.costEur, 'EUR') + (p.units > 0n ? small(`avg ${money(div(p.cost, p.units), p.currency)}`) : ''), true)}
+                ${td(money(p.unrealisedEur, 'EUR', { signed: true }), true)}
+                ${td(percent(p.xirr), true)}
                 ${td(money(p.realisedEur, 'EUR', { signed: true }), true)}
-                ${td(dividends(p.dividends), true)}
-            </tr>`).join('\n');
-    const closedRows = closed.map(({ instrument: i, position: p }) => `            <tr>
-                ${td(instrumentCell(i))}
+                ${td(p.dividendsEur ? money(p.dividendsEur, 'EUR', { signed: true }) : '—', true)}
+            </tr>`;
+    }).join('\n');
+    const totalRow = `            <tr>
+                <th scope="row">Total</th>${td('')}${td('')}
+                ${td(`<strong>${money(t.valueEur === null ? null : open.reduce((sum, p) => (sum === null || p.valueEur === null ? null : sum + p.valueEur), 0n), 'EUR')}</strong>`, true)}
+                ${td(`<strong>${money(t.costEur, 'EUR')}</strong>`, true)}
+                ${td(`<strong>${money(t.unrealisedEur, 'EUR', { signed: true })}</strong>`, true)}
+                ${td('')}${td('')}${td('')}
+            </tr>`;
+    const closedRows = closed.map(p => `            <tr>
+                ${td(instrumentCell(instrument(p.instrument)))}
                 ${td(money(p.realisedEur, 'EUR', { signed: true }), true)}
-                ${td(dividends(p.dividends), true)}
+                ${td(p.dividendsEur ? money(p.dividendsEur, 'EUR', { signed: true }) : '—', true)}
             </tr>`).join('\n');
-    const cashRows = balances.map(b => `            <tr>
-                ${td(esc(b.account.name))}
-                ${td(esc(b.currency))}
+    const cashRows = v.cash.map(b => `            <tr>
+                ${td(esc(accounts.get(Number(b.account))?.name ?? ''))}
                 ${td(money(b.amount, b.currency), true)}
+                ${td(money(b.valueEur, 'EUR'), true)}
             </tr>`).join('\n');
 
     return `<h1 class="fs-3">Holdings</h1>
-<p class="text-secondary-emphasis">Cost is what you paid, fees included, in EUR at the broker's rate on the day. Sales use up the oldest shares first (FIFO). Market value and returns come with daily prices.</p>
-${open.length ? table('open-heading', 'Positions', th('Instrument') + th('Units', true) + th('Average buy price', true) + th('Cost (EUR)', true) + th('Realised gain (EUR)', true) + th('Dividends, after tax', true), openRows) : ''}
-${closed.length ? table('closed-heading', 'Closed positions', th('Instrument') + th('Realised gain (EUR)', true) + th('Dividends, after tax', true), closedRows) : ''}
-${balances.length ? table('cash-heading', 'Cash', th('Account') + th('Currency') + th('Balance', true), cashRows) : ''}`;
+${notices.join('\n')}
+${summary}
+<form method="post" action="/prices/update" class="prices-line">
+    <input type="hidden" name="_csrf" value="${esc(csrf)}">
+    <span>${v.pricesAsOf ? `Prices as of ${esc(v.pricesAsOf)} from Yahoo Finance, exchange rates from the ECB.` : 'No prices yet.'}</span>
+    <button type="submit" class="btn btn-outline-primary btn-sm">Update now</button>
+</form>
+${open.length ? table('open-heading', 'Positions',
+        th('Instrument') + th('Units', true) + th('Price', true) + th('Value (EUR)', true) + th('Cost (EUR)', true)
+        + th('Unrealised gain', true) + th('Return a year', true) + th('Realised gain', true) + th('Dividends after tax (EUR)', true),
+        `${openRows}\n${totalRow}`) : ''}
+${closed.length ? table('closed-heading', 'Closed positions', th('Instrument') + th('Realised gain (EUR)', true) + th('Dividends after tax (EUR)', true), closedRows) : ''}
+${v.cash.length ? table('cash-heading', 'Cash', th('Account') + th('Balance', true) + th('Value (EUR)', true), cashRows) : ''}
+<p class="small text-secondary-emphasis mt-4">Cost is what you paid, fees included, in EUR at the rate on the day; sales use up the oldest shares first (FIFO). Value uses the latest close and today's ECB rate. "Put in" is deposits minus withdrawals, in EUR on the day. Return a year is the money-weighted return (XIRR), which accounts for when money went in and out.</p>`;
 }
 
 // `rows`: transactions with .account and .instrument attached

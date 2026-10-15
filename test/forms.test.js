@@ -53,7 +53,7 @@ test('an existing transaction fills the form with positive amounts', () => {
 test('instruments and accounts are checked', () => {
     const ok = parseInstrument({ symbol: 'vwce.de', name: 'Vanguard FTSE All-World', isin: 'ie00bk5bqt80', kind: 'etf', currency: 'eur', distributing: 'no' });
     assert.deepEqual(ok.errors, {});
-    assert.deepEqual(ok.values, { symbol: 'VWCE.DE', name: 'Vanguard FTSE All-World', isin: 'IE00BK5BQT80', kind: 'etf', currency: 'EUR', distributing: false, assetClass: null });
+    assert.deepEqual(ok.values, { symbol: 'VWCE.DE', name: 'Vanguard FTSE All-World', isin: 'IE00BK5BQT80', kind: 'etf', currency: 'EUR', distributing: false, assetClass: null, priceSymbol: null, priceSource: 'yahoo' });
     assert.equal(parseInstrument({ ...ok.values, distributing: '' }).values.distributing, null);
     assert.deepEqual(Object.keys(parseInstrument({ symbol: '', name: '', isin: 'X1', kind: 'bond', currency: '' }).errors).sort(), ['currency', 'isin', 'kind', 'name', 'symbol']);
 

@@ -4,6 +4,7 @@ import { createAuth } from './auth/index.js';
 import { createStore } from './auth/store.js';
 import { createDataStore } from './data/store.js';
 import { checkDb } from './db.js';
+import { createMarketUpdater } from './market/update.js';
 import { createRenderer, messagePage, PAGES, PUBLIC_DIR, VENDOR, view } from './pages.js';
 import { createPortfolio } from './portfolio/index.js';
 import { securityHeaders } from './security.js';
@@ -19,6 +20,8 @@ const trustProxy = (address, hop) => hop === 0 && (!address || LOOPBACK.has(addr
 // pass `store` and `data` (test/helpers/) instead.
 export function createApp({
     db = null, store = db && createStore(db), data = db && createDataStore(db), encryptionKey = null, now = Date.now,
+    // Price and rate updates; tests pass their own, or none
+    market = db && data && createMarketUpdater(data),
 } = {}) {
     const app = express();
     app.disable('x-powered-by');
@@ -53,7 +56,7 @@ export function createApp({
         const content = view(page.view);
         app.get(path, (req, res) => send(res, 200, render({ title: page.title, content, session: req.session, path })));
     }
-    if (data) app.use(createPortfolio({ data, render, send, message, now }));
+    if (data) app.use(createPortfolio({ data, market, render, send, message, now }));
 
     const notFound = view('notfound');
     app.use((req, res) => send(res, 404, render({ title: 'Page not found', content: notFound, session: req.session })));

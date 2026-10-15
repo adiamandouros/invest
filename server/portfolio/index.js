@@ -1,8 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
-import { ZERO } from '../lib/decimal.js';
-import { cash, positions } from '../lib/holdings.js';
+import { createPrices, createRates, valuePortfolio } from '../lib/valuation.js';
 import { parseMultipart } from '../multipart.js';
 import {
     accountFields, accountForm, accountsContent, deleteTransactionContent, instrumentFields, instrumentForm,
@@ -19,7 +18,8 @@ const PENDING_MS = 30 * 60_000; // how long a previewed import waits for "Import
 const sameString = (a, b) => typeof a === 'string' && typeof b === 'string'
     && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
-export function createPortfolio({ data, render, send, message, now = Date.now }) {
+// `market`: server/market/update.js createMarketUpdater(), or null for no price updates.
+export function createPortfolio({ data, market = null, render, send, message, now = Date.now }) {
     const router = express.Router();
     const form = express.urlencoded({ extended: false, limit: '2kb' });
     const upload = express.raw({ type: 'multipart/form-data', limit: '20mb' });
@@ -50,22 +50,26 @@ export function createPortfolio({ data, render, send, message, now = Date.now })
     }
 
     router.get('/holdings', async (req, res) => {
-        const { accounts, instruments, transactions } = await loadAll();
-        const rows = transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId }));
-        const all = [...positions(rows).values()]
-            .map(position => ({ instrument: instruments.get(position.instrument), position }))
-            .sort((a, b) => a.instrument.symbol.localeCompare(b.instrument.symbol));
-        const balances = [...cash(rows)]
-            .filter(([, amount]) => amount !== ZERO)
-            .map(([key, amount]) => {
-                const [accountId, currency] = key.split('|');
-                return { account: accounts.get(Number(accountId)), currency, amount };
-            });
-        page(req, res, 'Holdings', holdingsContent({
-            open: all.filter(h => h.position.units !== ZERO),
-            closed: all.filter(h => h.position.units === ZERO),
-            balances,
-        }));
+        const updating = market ? await market.refreshIfStale() || market.running : false;
+        const [{ accounts, instruments, transactions }, prices, rates, status] = await Promise.all([
+            loadAll(), data.listPrices(), data.listFxRates(), data.marketStatus(),
+        ]);
+        const valuation = valuePortfolio({
+            transactions: transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId })),
+            priceOf: createPrices(prices), eurPer: createRates(rates), today: new Date(now()).toISOString().slice(0, 10),
+        });
+        page(req, res, 'Holdings', holdingsContent({ valuation, instruments, accounts, status, updating, csrf: req.session.csrf }));
+    });
+
+    // Waits for the update (up to a minute), then shows the holdings again
+    router.post('/prices/update', form, async (req, res) => {
+        if (!sameString(req.body?._csrf, req.session.csrf)) return forbidden(res);
+        if (market) {
+            let timer;
+            await Promise.race([market.run().catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, 60_000); })]);
+            clearTimeout(timer);
+        }
+        res.redirect(303, '/holdings');
     });
 
     router.get('/transactions', async (req, res) => {

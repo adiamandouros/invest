@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { codePage, loginPage, setupPage } from '../server/auth/views.js';
 import { readFileSync as read } from 'fs';
 import { applyImport, parseStatement, planImport } from '../server/import/index.js';
-import { positions } from '../server/lib/holdings.js';
+import { createPrices, createRates, valuePortfolio } from '../server/lib/valuation.js';
 import { createRenderer, messagePage, renderPages } from '../server/pages.js';
 import {
     accountForm, accountsContent, deleteTransactionContent, instrumentForm, instrumentsContent, transactionForm,
@@ -26,18 +26,25 @@ const statement = parseStatement(read(new URL('./fixtures/freedom24-report.json'
 const plan = await planImport(statement, data);
 await applyImport(plan, data);
 const instrument = id => data.instruments.find(i => i.id === id);
-const held = [...positions(data.transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId }))).values()]
-    .map(position => ({ instrument: instrument(position.instrument), position }));
+const valuation = valuePortfolio({
+    transactions: data.transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId })),
+    priceOf: createPrices([{ instrumentId: 1, date: '2026-10-15', close: '149.5', currency: 'USD' }]),
+    eurPer: createRates([{ currency: 'USD', date: '2022-01-03', perEur: '1.13' }]),
+    today: '2026-10-15',
+});
 const page = (title, content) => render({ title, content, session });
 
 const all = {
     ...pages,
     '/holdings': page('Holdings', holdingsContent({
-        open: held.filter(h => h.position.units !== 0n),
-        closed: held.filter(h => h.position.units === 0n),
-        balances: [{ account: data.accounts[0], currency: 'USD', amount: 39223000000n }],
+        valuation, csrf: 'token', updating: true,
+        instruments: new Map(data.instruments.map(i => [i.id, i])),
+        accounts: new Map(data.accounts.map(a => [a.id, a])),
+        status: { prices: { ok: false, message: 'VTI.US: not found' } },
     })),
-    '/holdings (empty)': page('Holdings', holdingsContent({ open: [], closed: [], balances: [] })),
+    '/holdings (empty)': page('Holdings', holdingsContent({
+        valuation: { positions: [], cash: [], total: {}, missingPrices: [] }, instruments: new Map(), accounts: new Map(), csrf: 'token',
+    })),
     '/transactions': page('Transactions', transactionsContent({
         rows: data.transactions.map(t => ({ ...t, account: data.accounts[0], instrument: instrument(t.instrumentId) ?? null })),
         instrument: data.instruments[0],
