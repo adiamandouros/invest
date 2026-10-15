@@ -4,7 +4,8 @@ import { fetchHistory, suggestSymbol } from './yahoo.js';
 
 // Brings prices and exchange rates up to date: for each instrument still
 // held, the closes since the last stored one (or since its first
-// transaction), and ECB rates for every currency the ledger uses. One request
+// transaction); for one sold since, its history once, so past years can be
+// valued; and ECB rates for every currency the ledger uses. One request
 // per instrument and one for all rates. `data` is server/data/store.js.
 
 const DAY_MS = 86_400_000;
@@ -28,7 +29,8 @@ export async function updateMarketData(data, { fetch = globalThis.fetch, now = D
     const currencies = new Set(transactions.flatMap(t => [t.currency, t.feeCurrency]).filter(Boolean));
     let prices = 0;
     for (const i of instruments) {
-        if (!held.get(i.id)?.units || i.priceSource === 'none') continue;
+        const sold = !held.get(i.id)?.units;
+        if (!firstDate.has(i.id) || i.priceSource === 'none' || (sold && lastPrices[i.id])) continue;
         let symbol = i.priceSymbol;
         if (!symbol) {
             symbol = suggestSymbol(i);

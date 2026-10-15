@@ -15,6 +15,8 @@ const packageDir = name => dirname(require.resolve(`${name}/package.json`));
 export const VENDOR = {
     '/vendor/bootstrap':       join(packageDir('bootstrap'), 'dist'),
     '/vendor/bootstrap-icons': join(packageDir('bootstrap-icons'), 'font'),
+    // chart.js doesn't export its package.json; its main file is in dist/
+    '/vendor/chart.js':        dirname(require.resolve('chart.js')),
 };
 
 // ── Asset versions ──────────────────────────────────────────────────────────
@@ -59,7 +61,7 @@ export const view = name => readFileSync(join(VIEWS_DIR, `${name}.html`), 'utf8'
 
 // The signed-in part of the header: page links and the sign-out button
 const NAV = [
-    ['/', 'Overview'], ['/holdings', 'Holdings'], ['/p2p', 'P2P'], ['/allocation', 'Allocation'], ['/transactions', 'Transactions'],
+    ['/', 'Overview'], ['/holdings', 'Holdings'], ['/p2p', 'P2P'], ['/allocation', 'Allocation'], ['/reports', 'Reports'], ['/transactions', 'Transactions'],
     ['/instruments', 'Instruments'], ['/accounts', 'Accounts'], ['/import', 'Import'],
 ];
 

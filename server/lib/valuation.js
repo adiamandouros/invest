@@ -54,7 +54,7 @@ const asNumber = value => (value === null ? null : Number(fixed(value, 2)));
 
 // The EUR cash flow of one ledger row, seen from the instrument (holding = true)
 // or from the whole portfolio, as money put in (negative) or taken out (positive)
-function flow(row, eurPer, holding) {
+export function flow(row, eurPer, holding) {
     const fx = row.fxToEur === null || row.fxToEur === undefined ? null : dec(row.fxToEur);
     const amount = toEur(dec(row.amount) ?? ZERO, row.currency, row.date, fx, eurPer);
     const feeCurrency = row.feeCurrency ?? row.currency;
