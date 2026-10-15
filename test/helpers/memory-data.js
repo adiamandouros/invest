@@ -8,6 +8,7 @@ export function createMemoryData() {
     const fxRates = [];
     const status = {};
     const balances = [];
+    const groups = [];
     const lastBy = (list, key) => {
         const last = {};
         for (const r of list) if (!last[r[key]] || r.date > last[r[key]]) last[r[key]] = r.date;
@@ -27,6 +28,7 @@ export function createMemoryData() {
         fxRates,
         status,
         balances,
+        groups,
 
         listAccounts: async () => [...accounts].sort((a, b) => a.name.localeCompare(b.name)),
         findAccount: async (platform, externalRef) => [...accounts].sort((a, b) => a.id - b.id)
@@ -80,6 +82,18 @@ export function createMemoryData() {
         },
         async updateTransaction(id, t) { Object.assign(transactions.find(x => x.id === id), t); },
         async deleteTransaction(id) { transactions.splice(transactions.findIndex(x => x.id === id), 1); },
+
+        listGroups: async () => groups.map((g, position) => ({ ...g, position })),
+        async saveAllocation({ groups: list, removed, instruments: forInstruments, accounts: forAccounts }) {
+            const kept = groups.filter(g => !removed.includes(g.id));
+            for (const x of [...instruments, ...accounts]) if (removed.includes(x.allocationGroupId)) x.allocationGroupId = null;
+            let next = Math.max(0, ...groups.map(g => g.id)) + 1;
+            const saved = list.map(g => (g.id ? { ...kept.find(k => k.id === g.id), name: g.name, targetPct: g.targetPct } : { id: next++, name: g.name, targetPct: g.targetPct }));
+            if (new Set(saved.map(g => g.name)).size !== saved.length) throw Object.assign(new Error('Duplicate name'), { code: 'ER_DUP_ENTRY' });
+            groups.splice(0, groups.length, ...saved);
+            for (const [id, groupId] of forInstruments) instruments.find(i => i.id === id).allocationGroupId = groupId;
+            for (const [id, groupId] of forAccounts) accounts.find(a => a.id === id).allocationGroupId = groupId;
+        },
 
         listBalances: async ({ accountId } = {}) => balances
             .filter(b => !accountId || b.accountId === accountId)

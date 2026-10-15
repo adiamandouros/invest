@@ -9,7 +9,10 @@ import { createRenderer, messagePage, renderPages } from '../server/pages.js';
 import {
     accountForm, accountsContent, deleteTransactionContent, instrumentForm, instrumentsContent, transactionForm,
 } from '../server/portfolio/edit-views.js';
+import { allocation } from '../server/lib/allocation.js';
+import { dec } from '../server/lib/decimal.js';
 import { summariseP2p } from '../server/lib/p2p.js';
+import { allocationContent, allocationForm } from '../server/portfolio/allocation-views.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from '../server/portfolio/p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
 import { createMemoryData } from './helpers/memory-data.js';
@@ -36,6 +39,10 @@ const valuation = valuePortfolio({
 });
 const page = (title, content) => render({ title, content, session });
 
+const allocationGroups = [{ id: 1, name: 'S&P 500', targetPct: '60' }, { id: 2, name: 'International', targetPct: '10' }, { id: 3, name: 'P2P', targetPct: '30' }];
+const allocationItems = [['i1', 'VUAA.EU', 1, '65'], ['i2', 'VWRA.EU', 2, '10'], ['a2', 'Mintos', 3, '32']]
+    .map(([key, name, groupId, v]) => ({ key, name, groupId, valueEur: dec(v) }));
+
 // A Mintos account from the made-up statement, with a balance entered by hand
 const mintos = parseStatement(read(new URL('./fixtures/mintos-statement.csv', import.meta.url), 'utf8'));
 const mintosPlan = await planImport(mintos, data);
@@ -61,6 +68,16 @@ const all = {
     '/transactions': page('Transactions', transactionsContent({
         rows: data.transactions.map(t => ({ ...t, account: data.accounts[0], instrument: instrument(t.instrumentId) ?? null })),
         instrument: data.instruments[0],
+    })),
+    '/allocation': page('Allocation', allocationContent({ amount: '10', result: allocation({
+        groups: allocationGroups, amount: dec('10'),
+        items: [...allocationItems, { key: 'i9', name: 'VTI.US', groupId: null, valueEur: dec('5') }],
+    }) })),
+    '/allocation (empty, bad amount)': page('Allocation', allocationContent({ result: allocation({ groups: [], items: [] }), amount: 'x', error: 'Enter an amount above zero, like 500.' })),
+    '/allocation/edit (errors)': page('Groups and targets', allocationForm({
+        groups: allocationGroups, holdings: allocationItems, csrf: 'token',
+        values: { name0: 'S&P 500', target0: '60', name1: 'International', target1: 'x' },
+        errors: { target1: 'Enter a percentage from 0 to 100.', total: 'The targets add up to 60%; make them add up to 100%.' },
     })),
     '/p2p': page('P2P lending', p2pListContent({ summaries: [p2pSummary] })),
     '/p2p (empty)': page('P2P lending', p2pListContent({ summaries: [] })),

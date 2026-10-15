@@ -4,13 +4,13 @@
 
 const toAccount = row => row && {
     id: row.id, name: row.name, kind: row.kind, platform: row.platform, externalRef: row.external_ref,
-    baseCurrency: row.base_currency, openedOn: row.opened_on, notes: row.notes,
+    baseCurrency: row.base_currency, openedOn: row.opened_on, notes: row.notes, allocationGroupId: row.allocation_group_id ?? null,
 };
 
 const toInstrument = row => row && {
     id: row.id, isin: row.isin, symbol: row.symbol, name: row.name, kind: row.kind, currency: row.currency,
     distributing: row.distributing === null ? null : Boolean(row.distributing), assetClass: row.asset_class,
-    priceSymbol: row.price_symbol, priceSource: row.price_source,
+    priceSymbol: row.price_symbol, priceSource: row.price_source, allocationGroupId: row.allocation_group_id ?? null,
 };
 
 const toTransaction = row => ({
@@ -122,6 +122,35 @@ export function createDataStore(db) {
              WHERE id = ?`,
             [t.accountId, t.instrumentId, t.type, t.date, t.units, t.price, t.amount, t.currency, t.fee, t.feeCurrency, t.fxToEur, t.notes, id]),
         deleteTransaction: id => db.query('DELETE FROM transactions WHERE id = ?', [id]),
+
+        // ── Allocation targets ──
+
+        listGroups: async () => (await rows('SELECT * FROM allocation_groups ORDER BY position, id'))
+            .map(r => ({ id: r.id, name: r.name, targetPct: r.target_pct, position: r.position })),
+        // In one transaction: `groups` [{ id (null for a new one), name, targetPct }] in
+        // order, the groups to delete by id, and each instrument's and account's
+        // group: { instruments: [[id, groupId or null]], accounts: [...] }
+        async saveAllocation({ groups, removed, instruments, accounts }) {
+            const conn = await db.getConnection();
+            try {
+                await conn.beginTransaction();
+                if (removed.length) await conn.query('DELETE FROM allocation_groups WHERE id IN (?)', [removed]);
+                // Names are unique: clear the old ones first, so groups can swap names
+                for (const g of groups.filter(g => g.id)) await conn.query('UPDATE allocation_groups SET name = CONCAT(\'~\', id) WHERE id = ?', [g.id]);
+                for (const [position, g] of groups.entries()) {
+                    if (g.id) await conn.query('UPDATE allocation_groups SET name = ?, target_pct = ?, position = ? WHERE id = ?', [g.name, g.targetPct, position, g.id]);
+                    else await conn.query('INSERT INTO allocation_groups (name, target_pct, position) VALUES (?, ?, ?)', [g.name, g.targetPct, position]);
+                }
+                for (const [id, groupId] of instruments) await conn.query('UPDATE instruments SET allocation_group_id = ? WHERE id = ?', [groupId, id]);
+                for (const [id, groupId] of accounts) await conn.query('UPDATE accounts SET allocation_group_id = ? WHERE id = ?', [groupId, id]);
+                await conn.commit();
+            } catch (err) {
+                await conn.rollback();
+                throw err;
+            } finally {
+                conn.release();
+            }
+        },
 
         // ── P2P balances ──
 

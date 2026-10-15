@@ -200,3 +200,17 @@ textarea:focus-visible,
     --bs-btn-active-bg: #f0a3aa;
     --bs-btn-active-border-color: #f0a3aa;
 }
+
+/* ── Allocation groups: name and target side by side ── */
+
+.group-row {
+    display: grid;
+    grid-template-columns: 1fr 8rem;
+    gap: 0 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.group-row legend {
+    grid-column: 1 / -1;
+    margin-bottom: 0.25rem;
+}

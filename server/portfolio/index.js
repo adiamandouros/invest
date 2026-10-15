@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
+import { allocation } from '../lib/allocation.js';
 import { summariseP2p } from '../lib/p2p.js';
 import { createPrices, createRates, valuePortfolio } from '../lib/valuation.js';
 import { parseMultipart } from '../multipart.js';
@@ -8,7 +9,8 @@ import {
     accountFields, accountForm, accountsContent, deleteTransactionContent, instrumentFields, instrumentForm,
     instrumentsContent, transactionForm,
 } from './edit-views.js';
-import { parseAccount, parseBalance, parseInstrument, parseTransaction, transactionFields } from './forms.js';
+import { allocationContent, allocationForm } from './allocation-views.js';
+import { number, parseAccount, parseAllocation, parseBalance, parseInstrument, parseTransaction, transactionFields } from './forms.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from './p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
@@ -64,17 +66,21 @@ export function createPortfolio({ data, market = null, render, send, message, no
         }));
     }
 
-    router.get('/holdings', async (req, res) => {
-        const updating = market ? await market.refreshIfStale() || market.running : false;
-        const [{ accounts, instruments, transactions }, prices, rates, status] = await Promise.all([
-            loadAll(), data.listPrices(), data.listFxRates(), data.marketStatus(),
-        ]);
+    // Everything valued today (server/lib/valuation.js), P2P accounts at their summaries' values
+    async function valueAll() {
+        const [{ accounts, instruments, transactions }, prices, rates] = await Promise.all([loadAll(), data.listPrices(), data.listFxRates()]);
         const p2p = await p2pSummaries(accounts, transactions);
         const valuation = valuePortfolio({
             transactions: transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId })),
             priceOf: createPrices(prices), eurPer: createRates(rates), today: today(),
             accountValues: new Map(p2p.map(s => [`${s.account.id}|${s.currency}`, s.value])),
         });
+        return { accounts, instruments, valuation };
+    }
+
+    router.get('/holdings', async (req, res) => {
+        const updating = market ? await market.refreshIfStale() || market.running : false;
+        const [{ accounts, instruments, valuation }, status] = await Promise.all([valueAll(), data.marketStatus()]);
         page(req, res, 'Holdings', holdingsContent({ valuation, instruments, accounts, status, updating, csrf: req.session.csrf }));
     });
 
@@ -144,6 +150,55 @@ export function createPortfolio({ data, market = null, render, send, message, no
         if (!account || !/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) return next();
         await data.deleteBalance(account.id, req.params.date);
         res.redirect(303, `/p2p/${account.id}`);
+    });
+
+    // ── Allocation ──────────────────────────────────────────────────────────
+
+    // What can be in a group: open positions and P2P accounts, valued today
+    async function holdingsForAllocation() {
+        const { accounts, instruments, valuation } = await valueAll();
+        const positions = valuation.positions.filter(p => p.open).map(p => {
+            const i = instruments.get(p.instrument);
+            return { key: `i${i.id}`, name: i.symbol, groupId: i.allocationGroupId ?? null, valueEur: p.valueEur };
+        });
+        const p2p = [...accounts.values()].filter(a => a.kind === 'p2p').map(a => ({
+            key: `a${a.id}`, name: a.name, groupId: a.allocationGroupId ?? null,
+            valueEur: valuation.cash.filter(b => Number(b.account) === a.id).reduce((sum, b) => (sum === null || b.valueEur === null ? null : sum + b.valueEur), 0n),
+        }));
+        return [...positions.sort((a, b) => a.name.localeCompare(b.name)), ...p2p];
+    }
+
+    router.get('/allocation', async (req, res) => {
+        const [groups, holdings] = await Promise.all([data.listGroups(), holdingsForAllocation()]);
+        const text = String(req.query.amount ?? '').trim();
+        let amount = null;
+        let error = '';
+        if (text) {
+            try {
+                amount = number(text);
+                if (amount <= 0n) throw new Error();
+            } catch {
+                amount = null;
+                error = 'Enter an amount above zero, like 500.';
+            }
+        }
+        page(req, res, 'Allocation', allocationContent({ result: allocation({ groups, items: holdings, amount }), amount: text, error }), error ? 400 : 200);
+    });
+
+    router.get('/allocation/edit', async (req, res) => {
+        const [groups, holdings] = await Promise.all([data.listGroups(), holdingsForAllocation()]);
+        page(req, res, 'Groups and targets', allocationForm({ groups, holdings, csrf: req.session.csrf }));
+    });
+
+    router.post('/allocation', form, async (req, res) => {
+        if (!checked(req, res)) return;
+        const [groups, holdings] = await Promise.all([data.listGroups(), holdingsForAllocation()]);
+        const { values, errors } = parseAllocation(req.body, { groups, holdings });
+        if (Object.keys(errors).length) {
+            return page(req, res, 'Groups and targets', allocationForm({ groups, holdings, values: req.body, errors, csrf: req.session.csrf }), 400);
+        }
+        await data.saveAllocation(values);
+        res.redirect(303, '/allocation');
     });
 
     // ── Adding and editing transactions ─────────────────────────────────────
