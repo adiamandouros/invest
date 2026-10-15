@@ -7,6 +7,7 @@ export function createMemoryData() {
     const prices = [];
     const fxRates = [];
     const status = {};
+    const balances = [];
     const lastBy = (list, key) => {
         const last = {};
         for (const r of list) if (!last[r[key]] || r.date > last[r[key]]) last[r[key]] = r.date;
@@ -25,10 +26,11 @@ export function createMemoryData() {
         prices,
         fxRates,
         status,
+        balances,
 
         listAccounts: async () => [...accounts].sort((a, b) => a.name.localeCompare(b.name)),
-        findAccount: async (platform, externalRef) =>
-            accounts.find(a => a.platform === platform && a.externalRef === externalRef) ?? null,
+        findAccount: async (platform, externalRef) => [...accounts].sort((a, b) => a.id - b.id)
+            .find(a => a.platform === platform && (externalRef === null || a.externalRef === externalRef)) ?? null,
         getAccount: async id => accounts.find(a => a.id === id) ?? null,
         async createAccount(a) {
             const id = accounts.length + 1;
@@ -79,7 +81,21 @@ export function createMemoryData() {
         async updateTransaction(id, t) { Object.assign(transactions.find(x => x.id === id), t); },
         async deleteTransaction(id) { transactions.splice(transactions.findIndex(x => x.id === id), 1); },
 
-        async importStatement({ account, instrumentIds, instruments: added, transactions: rows }) {
+        listBalances: async ({ accountId } = {}) => balances
+            .filter(b => !accountId || b.accountId === accountId)
+            .sort((a, b) => a.accountId - b.accountId || (a.date < b.date ? -1 : 1))
+            .map(b => ({ ...b })),
+        async saveBalance(b) {
+            const old = balances.find(x => x.accountId === b.accountId && x.date === b.date);
+            upsert(balances, { accountId: b.accountId, date: b.date, value: b.value, cash: b.cash ?? old?.cash ?? null, source: 'manual', notes: b.notes },
+                x => x.accountId === b.accountId && x.date === b.date);
+        },
+        async deleteBalance(accountId, date) {
+            const i = balances.findIndex(x => x.accountId === accountId && x.date === date);
+            if (i !== -1) balances.splice(i, 1);
+        },
+
+        async importStatement({ account, instrumentIds, instruments: added, transactions: rows, updates = [], balances: cashes = [] }) {
             let accountId = account.id;
             if (!accountId) {
                 accountId = accounts.length + 1;
@@ -98,6 +114,15 @@ export function createMemoryData() {
                     type: t.type, date: t.date, units: t.units, price: t.price, amount: t.amount, currency: t.currency,
                     fee: t.fee ?? '0', feeCurrency: t.feeCurrency, fxToEur: t.fxToEur, importRef: t.ref, notes: t.notes,
                 });
+            }
+            for (const u of updates) {
+                const t = transactions.find(x => x.id === u.id && x.accountId === accountId);
+                if (t) Object.assign(t, { amount: u.amount, date: u.date, notes: u.notes });
+            }
+            for (const b of cashes) {
+                const old = balances.find(x => x.accountId === accountId && x.date === b.date);
+                if (old) old.cash = b.cash;
+                else balances.push({ accountId, date: b.date, value: null, cash: b.cash, source: 'import', notes: null });
             }
             return { accountId, added: rows.length };
         },

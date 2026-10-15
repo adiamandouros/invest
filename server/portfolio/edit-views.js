@@ -11,10 +11,10 @@ const LABELS = {
     amount: 'Amount', currency: 'Currency', fee: 'Fee', feeCurrency: 'Fee currency', fx: 'EUR rate', notes: 'Notes',
     symbol: 'Symbol', name: 'Name', isin: 'ISIN', kind: 'Kind', distributing: 'Dividends', assetClass: 'Asset class',
     platform: 'Platform', baseCurrency: 'Currency', openedOn: 'Opened on',
-    priceSource: 'Prices', priceSymbol: 'Yahoo Finance symbol',
+    priceSource: 'Prices', priceSymbol: 'Yahoo Finance symbol', value: 'Account value', cash: 'Cash not lent out',
 };
 
-function summary(errors) {
+export function summary(errors) {
     const entries = Object.entries(errors);
     if (!entries.length) return '';
     return `<div class="alert alert-danger" role="alert">
@@ -25,7 +25,7 @@ function summary(errors) {
 
 // One labelled form control with its hint and error. `options` makes it a
 // select: [[value, label], ...].
-function field(name, { values, errors }, { type = 'text', hint = '', options = null, required = false, attrs = '' } = {}) {
+export function field(name, { values, errors }, { type = 'text', hint = '', options = null, required = false, attrs = '' } = {}) {
     const id = `f-${name}`;
     const error = errors[name];
     const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
@@ -48,10 +48,10 @@ function field(name, { values, errors }, { type = 'text', hint = '', options = n
     </div>`;
 }
 
-const decimal = 'inputmode="decimal" autocomplete="off"';
+export const decimal = 'inputmode="decimal" autocomplete="off"';
 const currency = 'maxlength="3" autocapitalize="characters" autocomplete="off"';
 
-function buttons({ cancel, extra = '' }) {
+export function buttons({ cancel, extra = '' }) {
     return `    <div class="d-flex flex-wrap gap-2 mt-4">
         <button type="submit" class="btn btn-primary">Save</button>
         <a href="${cancel}" class="btn btn-outline-primary">Cancel</a>

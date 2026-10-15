@@ -9,6 +9,8 @@ import { createRenderer, messagePage, renderPages } from '../server/pages.js';
 import {
     accountForm, accountsContent, deleteTransactionContent, instrumentForm, instrumentsContent, transactionForm,
 } from '../server/portfolio/edit-views.js';
+import { summariseP2p } from '../server/lib/p2p.js';
+import { balanceForm, p2pAccountContent, p2pListContent } from '../server/portfolio/p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
 import { createMemoryData } from './helpers/memory-data.js';
 
@@ -34,6 +36,17 @@ const valuation = valuePortfolio({
 });
 const page = (title, content) => render({ title, content, session });
 
+// A Mintos account from the made-up statement, with a balance entered by hand
+const mintos = parseStatement(read(new URL('./fixtures/mintos-statement.csv', import.meta.url), 'utf8'));
+const mintosPlan = await planImport(mintos, data);
+await applyImport(mintosPlan, data);
+const p2pAccount = data.accounts.find(a => a.kind === 'p2p');
+await data.saveBalance({ accountId: p2pAccount.id, date: '2025-03-31', value: '400.41', cash: null, notes: 'From the overview' });
+const p2pSummary = summariseP2p({
+    account: p2pAccount, rows: data.transactions.filter(t => t.accountId === p2pAccount.id),
+    balances: await data.listBalances({ accountId: p2pAccount.id }), today: '2026-10-15',
+});
+
 const all = {
     ...pages,
     '/holdings': page('Holdings', holdingsContent({
@@ -49,6 +62,13 @@ const all = {
         rows: data.transactions.map(t => ({ ...t, account: data.accounts[0], instrument: instrument(t.instrumentId) ?? null })),
         instrument: data.instruments[0],
     })),
+    '/p2p': page('P2P lending', p2pListContent({ summaries: [p2pSummary] })),
+    '/p2p (empty)': page('P2P lending', p2pListContent({ summaries: [] })),
+    '/p2p/2': page('Mintos', p2pAccountContent({ summary: { ...p2pSummary, otherCurrencies: ['USD'] }, balances: await data.listBalances({ accountId: p2pAccount.id }), csrf: 'token' })),
+    '/p2p/2/balances/new (errors)': page('Add a balance', balanceForm({
+        action: '/p2p/2/balances', csrf: 'token', account: p2pAccount, values: { value: 'lots' }, errors: { value: 'Enter a number.', date: 'Enter a date.' },
+    })),
+    '/import/preview (Mintos)': page('Check the import', previewContent({ plan: { ...mintosPlan, updates: [{ id: 1 }] }, csrf: 'token', id: 'x' })),
     '/import': page('Import', importContent({ csrf: 'token', error: 'The file isn\'t valid JSON.' })),
     '/import/preview': page('Check the import', previewContent({ plan: { ...plan, warnings: ['A row to look at'] }, csrf: 'token', id: 'x' })),
     '/import/confirm': page('Import finished', doneContent({ added: 18, account: 'Freedom24' })),

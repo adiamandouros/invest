@@ -29,9 +29,9 @@ export function money(value, currency, { signed = false } = {}) {
 }
 
 const units = value => esc(plain(value));
-const table = (id, heading, head, body) => `
+export const table = (id, heading, head, body) => `
 <h2 class="fs-5 mt-4" id="${id}">${heading}</h2>
-<div class="table-responsive">
+<div class="table-responsive" tabindex="0" role="region" aria-labelledby="${id}">
     <table class="table table-sm align-middle" aria-labelledby="${id}">
         <thead><tr>${head}</tr></thead>
         <tbody>
@@ -39,12 +39,12 @@ ${body}
         </tbody>
     </table>
 </div>`;
-const th = (label, numeric = false) => `<th scope="col"${numeric ? ' class="text-end"' : ''}>${label}</th>`;
-const td = (html, numeric = false) => `<td${numeric ? ' class="text-end text-nowrap"' : ''}>${html}</td>`;
+export const th = (label, numeric = false) => `<th scope="col"${numeric ? ' class="text-end"' : ''}>${label}</th>`;
+export const td = (html, numeric = false) => `<td${numeric ? ' class="text-end text-nowrap"' : ''}>${html}</td>`;
 const dividends = map => Object.entries(map).map(([c, v]) => money(v, c, { signed: true })).join('<br>') || '—';
 const instrumentCell = i => `<a href="/transactions?instrument=${i.id}">${esc(i.symbol)}</a><br><span class="small text-secondary-emphasis">${esc(i.name)}</span>`;
 
-const NOTHING_YET = `<p>Nothing recorded yet. <a href="/import">Import a broker statement</a> to start.</p>`;
+const NOTHING_YET = `<p>Nothing recorded yet. <a href="/import">Import a statement</a> to start.</p>`;
 
 // "+7.3% a year"; null → "—"
 export function percent(rate) {
@@ -107,11 +107,17 @@ export function holdingsContent({ valuation: v, instruments, accounts, status = 
                 ${td(money(p.realisedEur, 'EUR', { signed: true }), true)}
                 ${td(p.dividendsEur ? money(p.dividendsEur, 'EUR', { signed: true }) : '—', true)}
             </tr>`).join('\n');
-    const cashRows = v.cash.map(b => `            <tr>
-                ${td(esc(accounts.get(Number(b.account))?.name ?? ''))}
+    const isP2p = b => accounts.get(Number(b.account))?.kind === 'p2p';
+    const balanceRows = (list, link) => list.map(b => {
+        const account = accounts.get(Number(b.account));
+        return `            <tr>
+                ${td(link ? `<a href="/p2p/${account.id}">${esc(account.name)}</a>` : esc(account?.name ?? ''))}
                 ${td(money(b.amount, b.currency), true)}
                 ${td(money(b.valueEur, 'EUR'), true)}
-            </tr>`).join('\n');
+            </tr>`;
+    }).join('\n');
+    const cashList = v.cash.filter(b => !isP2p(b));
+    const p2pList = v.cash.filter(isP2p);
 
     return `<h1 class="fs-3">Holdings</h1>
 ${notices.join('\n')}
@@ -126,13 +132,15 @@ ${open.length ? table('open-heading', 'Positions',
         + th('Unrealised gain', true) + th('Return a year', true) + th('Realised gain', true) + th('Dividends after tax (EUR)', true),
         `${openRows}\n${totalRow}`) : ''}
 ${closed.length ? table('closed-heading', 'Closed positions', th('Instrument') + th('Realised gain (EUR)', true) + th('Dividends after tax (EUR)', true), closedRows) : ''}
-${v.cash.length ? table('cash-heading', 'Cash', th('Account') + th('Balance', true) + th('Value (EUR)', true), cashRows) : ''}
-<p class="small text-secondary-emphasis mt-4">Cost is what you paid, fees included, in EUR at the rate on the day; sales use up the oldest shares first (FIFO). Value uses the latest close and today's ECB rate. "Put in" is deposits minus withdrawals, in EUR on the day. Return a year is the money-weighted return (XIRR), which accounts for when money went in and out.</p>`;
+${p2pList.length ? table('p2p-heading', 'P2P lending', th('Account') + th('Value', true) + th('Value (EUR)', true), balanceRows(p2pList, true)) : ''}
+${cashList.length ? table('cash-heading', 'Cash', th('Account') + th('Balance', true) + th('Value (EUR)', true), balanceRows(cashList, false)) : ''}
+<p class="small text-secondary-emphasis mt-4">Cost is what you paid, fees included, in EUR at the rate on the day; sales use up the oldest shares first (FIFO). Value uses the latest close and today's ECB rate. A P2P account's value is its cash plus loans at nominal value. "Put in" is deposits minus withdrawals, in EUR on the day. Return a year is the money-weighted return (XIRR), which accounts for when money went in and out.</p>`;
 }
 
-// `rows`: transactions with .account and .instrument attached
-export function transactionsContent({ rows, instrument }) {
-    const heading = instrument ? `Transactions: ${esc(instrument.symbol)}` : 'Transactions';
+// `rows`: transactions with .account and .instrument attached; `instrument`
+// or `account`: what the list is filtered by, if anything
+export function transactionsContent({ rows, instrument, account = null }) {
+    const heading = instrument ? `Transactions: ${esc(instrument.symbol)}` : account ? `Transactions: ${esc(account.name)}` : 'Transactions';
     const add = `<p><a href="/transactions/new${instrument ? `?instrument=${instrument.id}` : ''}" class="btn btn-outline-primary">Add a transaction</a></p>`;
     if (!rows.length) return `<h1 class="fs-3">${heading}</h1>\n${add}\n${NOTHING_YET}`;
     const body = [...rows].reverse().map(t => `            <tr>
@@ -148,25 +156,31 @@ export function transactionsContent({ rows, instrument }) {
             </tr>`).join('\n');
     return `<h1 class="fs-3">${heading}</h1>
 ${instrument ? `<p>${esc(instrument.name)}${instrument.isin ? ` · ${esc(instrument.isin)}` : ''} · <a href="/instruments/${instrument.id}/edit">Edit instrument</a> · <a href="/transactions">All transactions</a></p>` : ''}
+${account ? `<p>${account.kind === 'p2p' ? `<a href="/p2p/${account.id}">${esc(account.name)} income and balances</a> · ` : ''}<a href="/transactions">All transactions</a></p>` : ''}
 ${add}
 ${table('transactions-heading', `${rows.length} transaction${rows.length === 1 ? '' : 's'}, newest first`, th('Date') + th('Type') + th('Instrument') + th('Units', true) + th('Price', true) + th('Amount', true) + th('Fee', true) + th('Account') + '<th scope="col"><span class="visually-hidden">Actions</span></th>', body)}`;
 }
 
 export const importContent = ({ csrf, error = '' }) => `<h1 class="fs-3">Import a statement</h1>
-<p>Upload a <strong>Freedom24 broker report</strong> in JSON format (in Freedom24: Reports → Broker report, choose the whole period and JSON). Next you'll see what it adds and whether the result matches the report's closing balances, before anything is saved.</p>
-<p class="text-secondary-emphasis">Importing the same or an overlapping report again only adds what's new.</p>
+<p>Upload one of these. Next you'll see what it adds and whether the result matches the statement's closing balances, before anything is saved.</p>
+<ul>
+    <li>A <strong>Freedom24 broker report</strong> in JSON format (in Freedom24: Reports → Broker report, choose the whole period and JSON).</li>
+    <li>A <strong>Mintos account statement</strong> in CSV format (in Mintos: Account → Account statement, choose the period, then Download → CSV). Import the oldest first. Its interest, tax and fees are added up per month.</li>
+</ul>
+<p class="text-secondary-emphasis">Importing the same or an overlapping statement again only adds what's new, and fills in months that were only partly there.</p>
 ${error ? `<div class="alert alert-danger" role="alert">${esc(error)}</div>` : ''}
 <form method="post" action="/import/preview" enctype="multipart/form-data" class="mt-4">
     <input type="hidden" name="_csrf" value="${esc(csrf)}">
     <div class="mb-4">
-        <label for="statement" class="form-label">Report file (.json)</label>
-        <input id="statement" name="statement" type="file" class="form-control" accept=".json,application/json" required>
+        <label for="statement" class="form-label">Statement file (.json or .csv)</label>
+        <input id="statement" name="statement" type="file" class="form-control" accept=".json,.csv,application/json,text/csv" required>
     </div>
     <button type="submit" class="btn btn-primary">Preview the import</button>
 </form>`;
 
 export function previewContent({ plan, csrf, id }) {
-    const total = plan.transactions.length;
+    const changed = plan.updates?.length ?? 0;
+    const total = plan.transactions.length + changed;
     const counts = Object.entries(plan.counts).map(([type, n]) => `<li>${n} × ${esc(TYPE_LABELS[type] ?? type)}</li>`).join('');
     const checkRows = plan.check.map(c => `            <tr>
                 ${td(esc(c.label))}
@@ -180,27 +194,29 @@ export function previewContent({ plan, csrf, id }) {
     <dd class="col-sm-8">${esc(plan.account.name)}${plan.account.id ? '' : ' (new)'}</dd>
     <dt class="col-sm-4">Period</dt>
     <dd class="col-sm-8">${esc(plan.period.start)} to ${esc(plan.period.end)}</dd>
-    <dt class="col-sm-4">New instruments</dt>
-    <dd class="col-sm-8">${plan.newInstruments.map(i => `${esc(i.symbol)} (${esc(i.name)})`).join(', ') || 'None'}</dd>
+${plan.kind === 'p2p' ? '' : `    <dt class="col-sm-4">New instruments</dt>
+    <dd class="col-sm-8">${plan.newInstruments.map(i => `${esc(i.symbol)} (${esc(i.name)})`).join(', ') || 'None'}</dd>`}
     <dt class="col-sm-4">New transactions</dt>
-    <dd class="col-sm-8">${total ? `${total}<ul class="mb-0">${counts}</ul>` : 'None'}</dd>
+    <dd class="col-sm-8">${plan.transactions.length ? `${plan.transactions.length}<ul class="mb-0">${counts}</ul>` : 'None'}</dd>
+${changed ? `    <dt class="col-sm-4">Monthly sums updated</dt>
+    <dd class="col-sm-8">${changed} (months that were only partly imported before)</dd>` : ''}
     <dt class="col-sm-4">Already imported</dt>
     <dd class="col-sm-8">${plan.duplicates}</dd>
 </dl>
 ${plan.warnings.length ? `<div class="alert alert-warning" role="alert"><p class="mb-1">Some rows need a look:</p><ul class="mb-0">${plan.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
-${table('check-heading', 'Compared with the report\'s closing balances', th('Item') + th('Report', true) + th('App after import', true) + th('Result'), checkRows)}
-<p>${plan.checkOk ? 'Everything matches the report.' : '<strong>Some figures differ from the report.</strong> You can still import, but check the transactions afterwards.'}</p>
+${table('check-heading', 'Compared with the statement\'s closing balances', th('Item') + th('Statement', true) + th('App after import', true) + th('Result'), checkRows)}
+<p>${plan.checkOk ? 'Everything matches the statement.' : `<strong>Some figures differ from the statement.</strong> ${plan.kind === 'p2p' ? 'If the money in loans is negative, import the earlier statements first.' : ''} You can still import, but check the transactions afterwards.`}</p>
 ${total ? `<form method="post" action="/import/confirm" class="d-flex flex-wrap gap-2 mt-4">
     <input type="hidden" name="_csrf" value="${esc(csrf)}">
     <input type="hidden" name="id" value="${esc(id)}">
-    <button type="submit" class="btn btn-primary">Import ${total} transaction${total === 1 ? '' : 's'}</button>
+    <button type="submit" class="btn btn-primary">Import ${total} transaction${total === 1 ? '' : 's'}${changed ? ` (${changed} updated)` : ''}</button>
     <a href="/import" class="btn btn-outline-primary">Cancel</a>
 </form>` : '<p>There\'s nothing new to import. <a href="/holdings">Go to holdings</a></p>'}`;
 }
 
-export const doneContent = ({ added, account }) => `<div class="message-view">
+export const doneContent = ({ added, changed = 0, account, next = '/holdings' }) => `<div class="message-view">
     <i class="bi bi-check-circle fs-1 mb-3" aria-hidden="true"></i>
     <h1 class="fs-4">Import finished</h1>
-    <p>Added ${added} transaction${added === 1 ? '' : 's'} to ${esc(account)}.</p>
-    <a href="/holdings" class="btn btn-outline-primary rounded-pill px-4">See your holdings</a>
+    <p>Added ${added} transaction${added === 1 ? '' : 's'} to ${esc(account)}${changed ? ` and updated ${changed}` : ''}.</p>
+    <a href="${next}" class="btn btn-outline-primary rounded-pill px-4">${next === '/p2p' ? 'See your P2P accounts' : 'See your holdings'}</a>
 </div>`;

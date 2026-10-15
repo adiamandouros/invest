@@ -74,7 +74,9 @@ function flow(row, eurPer, holding) {
 
 // Everything the holdings page shows. `transactions` are ledger rows with
 // `account` and `instrument` keys; `priceOf`, `eurPer` from the functions above.
-export function valuePortfolio({ transactions, priceOf, eurPer, today }) {
+// `accountValues`: Map of "account|currency" → amount, replacing the ledger's
+// cash for those accounts (P2P accounts' values, see p2p.js).
+export function valuePortfolio({ transactions, priceOf, eurPer, today, accountValues = new Map() }) {
     // Rows without the broker's rate get the ECB's for their day
     const rows = transactions.map(r => (r.fxToEur !== null && r.fxToEur !== undefined) || r.currency === 'EUR'
         ? r : { ...r, fxToEur: eurPer(r.currency, r.date) });
@@ -99,7 +101,9 @@ export function valuePortfolio({ transactions, priceOf, eurPer, today }) {
         return { ...p, open, price, valueEur, unrealisedEur, dividendsEur, xirr: known ? xirr(flows) : null };
     });
 
-    const balances = [...cash(rows)].filter(([, amount]) => amount !== ZERO).map(([key, amount]) => {
+    const cashes = cash(rows);
+    for (const [key, amount] of accountValues) cashes.set(key, amount);
+    const balances = [...cashes].filter(([, amount]) => amount !== ZERO).map(([key, amount]) => {
         const [account, currency] = key.split('|');
         const rate = eurPer(currency, today);
         return { account, currency, amount, valueEur: rate === null ? null : mul(amount, rate) };

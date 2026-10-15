@@ -36,7 +36,7 @@ test('importing a report: preview, then import, then holdings and transactions',
         assert.equal(preview.status, 200);
         const previewHtml = await preview.text();
         assert.match(previewHtml, /Freedom24 \(new\)/);
-        assert.match(previewHtml, /Everything matches the report/);
+        assert.match(previewHtml, /Everything matches the statement/);
         assert.equal(app.data.transactions.length, 0, 'nothing saved by the preview');
 
         const id = previewHtml.match(/name="id" value="([^"]+)"/)[1];
@@ -77,7 +77,7 @@ test('uploads need the form token and a readable report', async () => {
         assert.equal((await b.post('/import/preview', upload('wrong'))).status, 403);
         const bad = await b.post('/import/preview', upload(csrf, '{"not": "a report"}'));
         assert.equal(bad.status, 400);
-        assert.match(await bad.text(), /Only Freedom24 broker reports/);
+        assert.match(await bad.text(), /a Freedom24 broker report \(JSON\) or a Mintos account statement \(CSV\)/);
         assert.equal((await b.post('/import/confirm', { _csrf: csrf, id: 'nope' })).status, 410);
     } finally {
         app.close();

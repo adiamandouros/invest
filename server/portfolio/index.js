@@ -1,16 +1,18 @@
 import { randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
+import { summariseP2p } from '../lib/p2p.js';
 import { createPrices, createRates, valuePortfolio } from '../lib/valuation.js';
 import { parseMultipart } from '../multipart.js';
 import {
     accountFields, accountForm, accountsContent, deleteTransactionContent, instrumentFields, instrumentForm,
     instrumentsContent, transactionForm,
 } from './edit-views.js';
-import { parseAccount, parseInstrument, parseTransaction, transactionFields } from './forms.js';
+import { parseAccount, parseBalance, parseInstrument, parseTransaction, transactionFields } from './forms.js';
+import { balanceForm, p2pAccountContent, p2pListContent } from './p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
-// The signed-in pages for holdings, transactions and importing statements.
+// The signed-in pages for holdings, P2P accounts, transactions and importing statements.
 // `data`: server/data/store.js. `render`, `send`, `message`: from server/app.js.
 
 const PENDING_MS = 30 * 60_000; // how long a previewed import waits for "Import"
@@ -49,14 +51,29 @@ export function createPortfolio({ data, market = null, render, send, message, no
         };
     }
 
+    const today = () => new Date(now()).toISOString().slice(0, 10);
+
+    // server/lib/p2p.js summaries for every P2P account, by name
+    async function p2pSummaries(accounts, transactions) {
+        const balances = await data.listBalances();
+        return [...accounts.values()].filter(a => a.kind === 'p2p').map(account => summariseP2p({
+            account,
+            rows: transactions.filter(t => t.accountId === account.id),
+            balances: balances.filter(b => b.accountId === account.id),
+            today: today(),
+        }));
+    }
+
     router.get('/holdings', async (req, res) => {
         const updating = market ? await market.refreshIfStale() || market.running : false;
         const [{ accounts, instruments, transactions }, prices, rates, status] = await Promise.all([
             loadAll(), data.listPrices(), data.listFxRates(), data.marketStatus(),
         ]);
+        const p2p = await p2pSummaries(accounts, transactions);
         const valuation = valuePortfolio({
             transactions: transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId })),
-            priceOf: createPrices(prices), eurPer: createRates(rates), today: new Date(now()).toISOString().slice(0, 10),
+            priceOf: createPrices(prices), eurPer: createRates(rates), today: today(),
+            accountValues: new Map(p2p.map(s => [`${s.account.id}|${s.currency}`, s.value])),
         });
         page(req, res, 'Holdings', holdingsContent({ valuation, instruments, accounts, status, updating, csrf: req.session.csrf }));
     });
@@ -75,17 +92,64 @@ export function createPortfolio({ data, market = null, render, send, message, no
     router.get('/transactions', async (req, res) => {
         const { accounts, instruments, transactions } = await loadAll();
         const instrument = instruments.get(Number(req.query.instrument)) ?? null;
+        const account = instrument ? null : accounts.get(Number(req.query.account)) ?? null;
         const rows = transactions
-            .filter(t => !instrument || t.instrumentId === instrument.id)
+            .filter(t => (!instrument || t.instrumentId === instrument.id) && (!account || t.accountId === account.id))
             .map(t => ({ ...t, account: accounts.get(t.accountId), instrument: instruments.get(t.instrumentId) ?? null }));
-        page(req, res, instrument ? `${instrument.symbol} transactions` : 'Transactions', transactionsContent({ rows, instrument }));
+        const title = instrument ? `${instrument.symbol} transactions` : account ? `${account.name} transactions` : 'Transactions';
+        page(req, res, title, transactionsContent({ rows, instrument, account }));
+    });
+
+    // ── P2P accounts ────────────────────────────────────────────────────────
+
+    router.get('/p2p', async (req, res) => {
+        const { accounts, transactions } = await loadAll();
+        page(req, res, 'P2P lending', p2pListContent({ summaries: await p2pSummaries(accounts, transactions) }));
+    });
+
+    const p2pAccount = async req => {
+        const account = await data.getAccount(Number(req.params.id));
+        return account?.kind === 'p2p' ? account : null;
+    };
+
+    router.get('/p2p/:id', async (req, res, next) => {
+        const account = await p2pAccount(req);
+        if (!account) return next();
+        const [rows, balances] = await Promise.all([data.listTransactions({ accountId: account.id }), data.listBalances({ accountId: account.id })]);
+        const summary = summariseP2p({ account, rows, balances, today: today() });
+        page(req, res, account.name, p2pAccountContent({ summary, balances, csrf: req.session.csrf }));
+    });
+
+    router.get('/p2p/:id/balances/new', async (req, res, next) => {
+        const account = await p2pAccount(req);
+        if (!account) return next();
+        page(req, res, 'Add a balance', balanceForm({ action: `/p2p/${account.id}/balances`, csrf: req.session.csrf, account, values: { date: today() } }));
+    });
+
+    router.post('/p2p/:id/balances', form, async (req, res, next) => {
+        if (!checked(req, res)) return;
+        const account = await p2pAccount(req);
+        if (!account) return next();
+        const { values, errors } = parseBalance(req.body, account.id);
+        if (Object.keys(errors).length) {
+            return page(req, res, 'Add a balance', balanceForm({ action: `/p2p/${account.id}/balances`, csrf: req.session.csrf, account, values: req.body, errors }), 400);
+        }
+        await data.saveBalance(values);
+        res.redirect(303, `/p2p/${account.id}`);
+    });
+
+    router.post('/p2p/:id/balances/:date/delete', form, async (req, res, next) => {
+        if (!checked(req, res)) return;
+        const account = await p2pAccount(req);
+        if (!account || !/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) return next();
+        await data.deleteBalance(account.id, req.params.date);
+        res.redirect(303, `/p2p/${account.id}`);
     });
 
     // ── Adding and editing transactions ─────────────────────────────────────
 
     const choices = async () => ({ accounts: await data.listAccounts(), instruments: await data.listInstruments() });
     const id = req => Number(req.params.id);
-    const today = () => new Date(now()).toISOString().slice(0, 10);
     const checked = (req, res) => {
         if (sameString(req.body?._csrf, req.session.csrf)) return true;
         forbidden(res);
@@ -268,7 +332,10 @@ export function createPortfolio({ data, market = null, render, send, message, no
         // Planned again, in case something was imported since the preview
         const plan = await planImport(waiting.statement, data);
         const { added } = await applyImport(plan, data);
-        page(req, res, 'Import finished', doneContent({ added, account: plan.account.name }));
+        page(req, res, 'Import finished', doneContent({
+            added, changed: plan.updates?.length ?? 0, account: plan.account.name,
+            next: plan.kind === 'p2p' ? '/p2p' : '/holdings',
+        }));
     });
 
     return router;
