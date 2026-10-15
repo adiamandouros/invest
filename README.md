@@ -54,8 +54,12 @@ First-time setup:
 4. **SSL/TLS Status:** make sure AutoSSL covers `invest.sonovabitc.win`.
 5. Open https://invest.sonovabitc.win/health. It should show `{"status":"ok","db":"ok"}`.
 
-Each later deploy: *Git Version Control → Manage → Pull or Deploy*: *Update from Remote*, then *Deploy HEAD Commit*. This runs `.cpanel.yml`, which installs packages and restarts the app (see `scripts/cpanel-deploy.sh`). Never run `npm install` in the app folder on the server, because `node_modules` there is a link the Node.js selector manages.
+**Each later deploy**, in cPanel → Terminal:
 
-If every request hangs, LiteSpeed is probably still sending requests to an old app process that never started, and *Restart* doesn't replace it. In cPanel → Terminal, `ps -u sonovabi -o pid,etime,args | grep -i [n]ode` lists the app processes. A working one is named `lsnode:/home/sonovabi/repositories/invest/`. A stuck one shows as `node …/lsnode.js`, and `readlink /proc/<pid>/cwd` points into `~/nodevenv/repositories/invest/`. Stop it with `kill <pid>`; the next request starts a fresh process.
+```bash
+bash ~/repositories/invest/scripts/deploy.sh
+```
+
+[`scripts/deploy.sh`](scripts/deploy.sh) pulls the latest `main` from GitHub and installs packages if they changed. Then it stops the app's running processes, so LiteSpeed starts a fresh one with the new code, and checks `/health`. It ends with "Done: the app is up." or says what's wrong. Stopping processes this way also clears a process stuck at startup, which cPanel's *Restart* button doesn't replace. Never run `npm install` in the app folder on the server, because `node_modules` there is a link the Node.js selector manages.
 
 LiteSpeed serves `public/` itself with a 7-day cache, so stylesheets and scripts are linked with a `?v=<hash>` that changes on every deploy.
