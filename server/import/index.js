@@ -2,24 +2,52 @@ import { dec, fixed, plain } from '../lib/decimal.js';
 import { cash, positions } from '../lib/holdings.js';
 import { isFreedom24, parseFreedom24 } from './freedom24.js';
 import { isMintos, parseMintos } from './mintos.js';
+import { isPeerberry, parsePeerberry } from './peerberry.js';
+import { isXlsx, readXlsx } from './xlsx.js';
 
 // Importing a statement in two steps: planImport works out what's new
 // and checks the result against the statement's closing balances, without
 // writing anything; applyImport writes that plan in one database transaction.
 // `data` is server/data/store.js.
 
-const UNKNOWN = 'This file isn\'t a statement the app can read yet: a Freedom24 broker report (JSON) or a Mintos account statement (CSV).';
+const UNKNOWN = 'isn\'t a statement the app can read yet: a Freedom24 broker report (JSON), Mintos account statements (CSV) or PeerBerry transactions (Excel).';
 
-export function parseStatement(text) {
-    if (isMintos(text)) return parseMintos(text);
-    let report;
-    try {
-        report = JSON.parse(text);
-    } catch {
-        throw new Error(UNKNOWN);
+// Which platform a file is from: 'freedom24' (with the parsed report), 'mintos' or 'peerberry'
+function identify(file, name) {
+    if (isXlsx(file)) {
+        let rows;
+        try {
+            rows = readXlsx(file);
+        } catch {
+            rows = [];
+        }
+        if (isPeerberry(rows)) return { platform: 'peerberry' };
+        throw new Error(`${name} ${UNKNOWN}`);
     }
-    if (isFreedom24(report)) return parseFreedom24(report);
-    throw new Error(UNKNOWN);
+    const text = Buffer.isBuffer(file) ? file.toString('utf8') : file;
+    if (isMintos(text)) return { platform: 'mintos', text };
+    try {
+        const report = JSON.parse(text);
+        if (isFreedom24(report)) return { platform: 'freedom24', report };
+    } catch {
+        // not JSON either
+    }
+    throw new Error(`${name} ${UNKNOWN}`);
+}
+
+// One file (text or Buffer) or several from the same P2P platform, read as one statement
+export function parseStatement(input) {
+    const files = [input].flat();
+    const found = files.map((file, i) => identify(file, files.length > 1 ? `File ${i + 1}` : 'This file'));
+    const platforms = new Set(found.map(f => f.platform));
+    if (platforms.size > 1) throw new Error('These files are from different platforms. Import one platform\'s files at a time.');
+    const [platform] = platforms;
+    if (platform === 'freedom24') {
+        if (found.length > 1) throw new Error('Import one Freedom24 report at a time.');
+        return parseFreedom24(found[0].report);
+    }
+    if (platform === 'mintos') return parseMintos(found.map(f => f.text));
+    return parsePeerberry(files);
 }
 
 const keyOf = instrument => instrument.isin ?? instrument.symbol;
@@ -111,10 +139,11 @@ export async function planImport(statement, data) {
     };
 }
 
-// A P2P statement's monthly sums (server/import/mintos.js) are added, or
+// A P2P statement's monthly sums (server/import/p2p.js) are added, or
 // replace what an earlier import gave for that month when this statement has
 // the whole month; a month only partly in the statement doesn't replace one
-// already imported. Checked against the statement's own cash balance.
+// already imported. Checked against the statement's cash balance, or, where
+// it has none (PeerBerry), against the cash worked out from the first row on.
 const lastDay = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
 const monthName = month => new Date(`${month}-01T00:00:00Z`).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
@@ -142,21 +171,33 @@ async function planP2pImport(statement, data) {
     const warnings = [...statement.warnings, ...[...kept].sort().map(m =>
         `${monthName(m)} is only partly in this statement and was imported before with other amounts, so the app keeps those. To update it, export a statement that starts on the 1st of the month.`)];
 
-    // The statement's rows add up to its closing cash
-    const check = Object.entries(statement.check).map(([currency, c]) => {
-        const computed = c.opening + c.turnover;
-        return { label: `Cash ${currency} on ${end}`, expected: fixed(c.closing), computed: fixed(computed), ok: fixed(c.closing) === fixed(computed) };
-    });
-    // The ledger is the account's value: with this import it can't be less than the cash
     const changed = new Map(updates.map(u => [u.id, u.amount]));
     const after = [...existing.map(t => ({ ...t, amount: changed.get(t.id) ?? t.amount })), ...transactions]
         .filter(t => t.date <= end).map(t => ({ ...t, account: 'a' }));
-    const balances = cash(after);
+    const values = cash(after);
+    // Without balances in the statement, the cash is known only when the app has nothing from before it
+    const fromTheStart = !existing.some(t => t.date < start);
+    const check = [];
+    const openings = {};
     for (const [currency, c] of Object.entries(statement.check)) {
-        const value = balances.get(`a|${currency}`) ?? 0n;
+        const opening = c.opening ?? (fromTheStart ? 0n : null);
+        openings[currency] = opening;
+        const worked = opening === null ? null : opening + c.turnover;
+        if (c.closing !== null) {
+            // The statement's rows add up to its closing cash
+            check.push({ label: `Cash ${currency} on ${end}`, expected: fixed(c.closing), computed: fixed(worked), ok: fixed(c.closing) === fixed(worked) });
+        } else if (worked !== null) {
+            check.push({ label: `Cash ${currency} on ${end}, worked out`, expected: 'not negative', computed: fixed(worked), ok: worked >= 0n });
+        } else {
+            warnings.push(`The ${currency} cash can't be worked out, because this statement has no balances and the app has rows from before it. The import is fine, but to check it, import all the files from the first deposit on together.`);
+            continue;
+        }
+        // The ledger is the account's value: with this import it can't be less than the cash
+        const closing = c.closing ?? worked;
+        const value = values.get(`a|${currency}`) ?? 0n;
         check.push({
-            label: `Money in loans (${currency}, value minus cash)`, expected: 'not negative', computed: fixed(value - c.closing),
-            ok: value - c.closing >= 0n,
+            label: `Money in loans (${currency}, value minus cash)`, expected: 'not negative', computed: fixed(value - closing),
+            ok: value - closing >= 0n,
         });
     }
 
@@ -171,7 +212,9 @@ async function planP2pImport(statement, data) {
         newInstruments: [],
         transactions,
         updates,
-        balances: statement.balances.map(b => ({ date: b.date, cash: b.cash })),
+        balances: statement.balances
+            .map(b => ({ date: b.date, cash: b.cash ?? (openings[b.currency] == null ? null : fixed(openings[b.currency] + b.running, 6)) }))
+            .filter(b => b.cash !== null),
         counts,
         duplicates,
         warnings,

@@ -165,15 +165,18 @@ export const importContent = ({ csrf, error = '' }) => `<h1 class="fs-3">Import 
 <p>Upload one of these. Next you'll see what it adds and whether the result matches the statement's closing balances, before anything is saved.</p>
 <ul>
     <li>A <strong>Freedom24 broker report</strong> in JSON format (in Freedom24: Reports → Broker report, choose the whole period and JSON).</li>
-    <li>A <strong>Mintos account statement</strong> in CSV format (in Mintos: Account → Account statement, choose the period, then Download → CSV). Import the oldest first. Its interest, tax and fees are added up per month.</li>
+    <li><strong>Mintos account statements</strong> in CSV format (in Mintos: Account → Account statement, choose the period, then Download → CSV).</li>
+    <li><strong>PeerBerry transactions</strong> in Excel format (in PeerBerry: Transactions, all types, then export to Excel). Upload every file from your first deposit on together, so the app can work out the cash.</li>
 </ul>
+<p>You can choose several files from one platform at once, like one per year; rows in more than one file count once. P2P interest, tax and fees are added up per month.</p>
 <p class="text-secondary-emphasis">Importing the same or an overlapping statement again only adds what's new, and fills in months that were only partly there.</p>
 ${error ? `<div class="alert alert-danger" role="alert">${esc(error)}</div>` : ''}
 <form method="post" action="/import/preview" enctype="multipart/form-data" class="mt-4">
     <input type="hidden" name="_csrf" value="${esc(csrf)}">
     <div class="mb-4">
-        <label for="statement" class="form-label">Statement file (.json or .csv)</label>
-        <input id="statement" name="statement" type="file" class="form-control" accept=".json,.csv,application/json,text/csv" required>
+        <label for="statement" class="form-label">Statement files (.json, .csv or .xlsx)</label>
+        <input id="statement" name="statement" type="file" class="form-control" multiple required
+               accept=".json,.csv,.xlsx,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
     </div>
     <button type="submit" class="btn btn-primary">Preview the import</button>
 </form>`;

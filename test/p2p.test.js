@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { applyImport, parseStatement, planImport } from '../server/import/index.js';
 import { csvRows } from '../server/import/mintos.js';
+import { excelDate, readXlsx } from '../server/import/xlsx.js';
 import { dec, fixed } from '../server/lib/decimal.js';
 import { summariseP2p } from '../server/lib/p2p.js';
 import { createRates, valuePortfolio } from '../server/lib/valuation.js';
@@ -22,6 +23,12 @@ const until = date => [lines[0], ...lines.slice(1).filter(l => l.slice(1, 11) <=
 const from = date => [lines[0], ...lines.slice(1).filter(l => l.slice(1, 11) >= date)].join('\n');
 
 const byRef = (list, ref) => list.find(t => t.ref === ref);
+
+// test/fixtures/peerberry-{1,2}.xlsx are made up (make-peerberry.py), overlapping on 10 June 2024:
+//   deposit 200 (14 May), withdrawal 50 (1 July); interest May 0.8, June 1.25, July 0.5
+//   loans: 150 + 40 + 100 bought − 10 − 140 − 30 repaid = 110; cash 42.55; value 152.55
+//   cash at month ends: May 20.80, June 62.05, July 42.55
+const PEERBERRY = [1, 2].map(n => readFileSync(new URL(`./fixtures/peerberry-${n}.xlsx`, import.meta.url)));
 
 test('CSV fields can be quoted, with commas and quotes inside', () => {
     assert.deepEqual(csvRows('a,"b, c","say ""hi"""\r\n1,,3\n'), [['a', 'b, c', 'say "hi"'], ['1', '', '3']]);
@@ -134,12 +141,87 @@ test('a P2P account\'s value, gain, return and income per month', async () => {
     assert.equal(fixed(v.total.gainEur, 4), '0.4123');
 });
 
-function upload(csrf, text = CSV) {
+test('an .xlsx file is read into rows of text', () => {
+    const rows = readXlsx(PEERBERRY[0]);
+    assert.deepEqual(rows[0], ['ID', 'Date', 'Type', 'Amount', 'Currency', 'Loan Id', 'Country', 'Loan Status']);
+    assert.deepEqual(rows.at(-1), ['1001', '2024-05-14', 'DEPOSIT', '200', 'EUR', '', 'Testland', 'FINISHED'], 'an empty cell stays in its column');
+    assert.equal(excelDate('45488'), '2024-07-15');
+    assert.equal(excelDate('2024-07-15'), '2024-07-15');
+    assert.throws(() => readXlsx(Buffer.from('PK\x03\x04 not really a zip')), /isn't a readable Excel file/);
+});
+
+test('PeerBerry exports that overlap are read as one statement', () => {
+    const s = parseStatement(PEERBERRY);
+    assert.equal(s.platform, 'peerberry');
+    assert.deepEqual(s.period, { start: '2024-05-14', end: '2024-07-15' });
+    assert.deepEqual(s.warnings, []);
+    assert.deepEqual(s.transactions.map(t => [t.ref, t.type, t.date, t.amount]), [
+        ['peerberry:1001', 'deposit', '2024-05-14', '200'],
+        ['peerberry:EUR:2024-05:interest', 'interest', '2024-05-31', '0.8'],
+        ['peerberry:EUR:2024-06:interest', 'interest', '2024-06-10', '1.25'],
+        ['peerberry:1009', 'withdrawal', '2024-07-01', '-50'],
+        ['peerberry:EUR:2024-07:interest', 'interest', '2024-07-15', '0.5'],
+    ], 'the rows of 10 June, in both files, count once');
+    assert.match(byRef(s.transactions, 'peerberry:EUR:2024-05:interest').notes, /sum of 1 statement row: Repayment interest/);
+    assert.throws(() => parseStatement([PEERBERRY[0], CSV]), /different platforms/);
+    assert.throws(() => parseStatement([Buffer.from('hello'), CSV]), /File 1 isn't a statement/);
+});
+
+test('PeerBerry\'s cash is worked out from the first deposit, and only then', async () => {
+    const data = createMemoryData();
+    const plan = await planImport(parseStatement(PEERBERRY), data);
+    assert.deepEqual(plan.check.map(c => [c.label, c.expected, c.computed, c.ok]), [
+        ['Cash EUR on 2024-07-15, worked out', 'not negative', '42.55', true],
+        ['Money in loans (EUR, value minus cash)', 'not negative', '110.00', true],
+    ]);
+    assert.deepEqual(plan.balances, [{ date: '2024-05-31', cash: '20.800000' }, { date: '2024-06-12', cash: '62.050000' }, { date: '2024-07-15', cash: '42.550000' }]);
+    await applyImport(plan, data);
+    const s = summariseP2p({ account: data.accounts[0], rows: data.transactions, balances: data.balances, today: '2024-12-31' });
+    assert.deepEqual([s.value, s.contributed, s.interest, s.cash.amount].map(v => fixed(v)), ['152.55', '150.00', '2.55', '42.55']);
+
+    // The second file alone, after the first: the cash before it isn't known
+    const later = createMemoryData();
+    await applyImport(await planImport(parseStatement(PEERBERRY[0]), later), later);
+    const second = await planImport(parseStatement(PEERBERRY[1]), later);
+    assert.deepEqual(second.check, []);
+    assert.match(second.warnings[0], /EUR cash can't be worked out/);
+    assert.deepEqual(second.balances, []);
+    assert.equal(second.transactions.length, 2, 'the withdrawal and July; June is already there');
+});
+
+test('several Mintos files are read as one, overlaps counted once', () => {
+    const s = parseStatement([from('2025-02-14'), until('2025-02-20')]);
+    assert.deepEqual(s.period, { start: '2025-01-01', end: '2025-03-31' });
+    assert.equal(byRef(s.transactions, 'mintos:EUR:2025-02:interest').amount, '2.25');
+    assert.equal(fixed(s.check.EUR.opening + s.check.EUR.turnover), fixed(s.check.EUR.closing));
+});
+
+function upload(csrf, files = [[CSV, 'statement.csv', 'text/csv']]) {
     const form = new FormData();
     form.append('_csrf', csrf);
-    form.append('statement', new Blob([text], { type: 'text/csv' }), 'statement.csv');
+    for (const [data, name, type] of files) form.append('statement', new Blob([data], { type }), name);
     return form;
 }
+
+test('several PeerBerry files are uploaded and imported together', async () => {
+    const app = await start();
+    app.clock.now = Date.parse('2024-12-31T12:00:00Z');
+    try {
+        const b = app.browser();
+        await signUp(b, app.clock);
+        const form = await (await b.get('/import')).text();
+        assert.match(form, /multiple/);
+        const xlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        const previewHtml = await (await b.post('/import/preview', upload(csrfOf(form), PEERBERRY.map((d, i) => [d, `p${i}.xlsx`, xlsx])))).text();
+        assert.match(previewHtml, /PeerBerry \(new\)/);
+        assert.match(previewHtml, /Everything matches the statement/);
+        const id = previewHtml.match(/name="id" value="([^"]+)"/)[1];
+        assert.match(await (await b.post('/import/confirm', { _csrf: csrfOf(previewHtml), id })).text(), /Added 5 transactions to PeerBerry/);
+        assert.match(await (await b.get('/p2p')).text(), /€152\.55/);
+    } finally {
+        app.close();
+    }
+});
 
 test('the P2P pages: import a Mintos statement, see the account, add and delete a balance', async () => {
     const app = await start();
