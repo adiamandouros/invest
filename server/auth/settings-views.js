@@ -51,6 +51,9 @@ ${input('code', 'Code from your current app', auth, { type: 'text', autocomplete
     <button type="submit" class="btn btn-primary">Continue</button>
 </form>
 
+<h2 class="fs-5 mt-4">Your data</h2>
+<p><a href="/export">Export your data</a>: a full backup, or the transactions for a spreadsheet.</p>
+
 <h2 class="fs-5 mt-4" id="devices-heading">Signed-in devices</h2>
 ${sessions > 1 ? `<p>You're signed in on ${sessions} devices or browsers, this one included. Each stays signed in for up to two weeks.</p>
 <form method="post" action="/settings/sessions">

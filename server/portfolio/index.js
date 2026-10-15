@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
 import { allocation } from '../lib/allocation.js';
+import { backup, transactionsCsv } from '../lib/export.js';
 import { fixed } from '../lib/decimal.js';
 import { summariseP2p } from '../lib/p2p.js';
 import { project, spreadOf } from '../lib/projection.js';
@@ -16,6 +17,7 @@ import { allocationContent, allocationForm } from './allocation-views.js';
 import { number, parseAccount, parseAllocation, parseBalance, parseInstrument, parseTransaction, transactionFields } from './forms.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from './p2p-views.js';
 import { dashboardContent, dashboardNotices } from './dashboard-views.js';
+import { exportContent } from './export-views.js';
 import { projectionContent } from './projection-views.js';
 import { CHART_SCRIPTS, reportsContent, yearContent, yearCsv, yearsCsv } from './reports-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
@@ -266,6 +268,22 @@ export function createPortfolio({ data, market = null, render, send, message, no
         page(req, res, 'Projection', projectionContent({ history, values, errors, projection, split, thisYear }),
             Object.keys(errors).length ? 400 : 200, projection ? CHART_SCRIPTS : []);
     });
+
+    // ── Export ──────────────────────────────────────────────────────────────
+
+    const stamp = () => new Date(now()).toISOString().slice(0, 10);
+
+    router.get('/export', async (req, res) => {
+        const [accounts, transactions, prices] = await Promise.all([data.listAccounts(), data.listTransactions(), data.listPrices()]);
+        page(req, res, 'Export your data', exportContent({ counts: { accounts: accounts.length, transactions: transactions.length, prices: prices.length } }));
+    });
+
+    router.get('/export/backup.json', async (req, res) => {
+        res.set({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="invest-backup-${stamp()}.json"` });
+        res.send(JSON.stringify(await backup(data, new Date(now())), null, 1));
+    });
+
+    router.get('/export/transactions.csv', async (req, res) => download(res, `invest-transactions-${stamp()}.csv`, await transactionsCsv(data)));
 
     // ── Allocation ──────────────────────────────────────────────────────────
 
