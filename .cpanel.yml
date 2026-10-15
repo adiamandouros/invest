@@ -1,0 +1,6 @@
+# cPanel "Git Version Control" runs these tasks on "Deploy HEAD Commit"
+# (or automatically after a push, for repositories pushed to cPanel).
+---
+deployment:
+  tasks:
+    - /bin/bash scripts/cpanel-deploy.sh

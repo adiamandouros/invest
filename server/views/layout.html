@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{{title}}</title>
+    <meta name="theme-color" content="#161b27">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/svg+xml" href="/icon/favicon.svg">
+</head>
+<body>
+
+    <a href="#app-content" class="skip-link">Skip to content</a>
+
+    <header class="site-header border-bottom">
+        <nav class="container d-flex align-items-center gap-3 py-2" aria-label="Main navigation">
+            <a href="/" class="brand fw-bold fs-5 text-decoration-none">
+                <i class="bi bi-graph-up-arrow me-2" aria-hidden="true"></i>Invest
+            </a>
+        </nav>
+    </header>
+
+    <main id="app-content" class="container py-4" tabindex="-1">
+{{content}}
+    </main>
+
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+{{scripts}}
+</body>
+</html>
