@@ -214,3 +214,32 @@ textarea:focus-visible,
     grid-column: 1 / -1;
     margin-bottom: 0.25rem;
 }
+
+/* ── Charts: the chart beside its table on wide screens ── */
+
+.chart-box {
+    position: relative;
+    height: 18rem;
+    margin-bottom: 1rem;
+}
+
+@media (min-width: 768px) {
+    .chart-and-table {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        align-items: start;
+    }
+}
+
+/* ── Printing the reports: light, without the navigation and buttons ── */
+
+@media print {
+    .site-header, .skip-link, .no-print, form { display: none !important; }
+    body, main { background: #fff !important; color: black !important; }
+    .table { --bs-table-bg: transparent; --bs-table-color: black; --bs-table-border-color: #999; }
+    .summary > div { background: none !important; border: 1px solid #999; }
+    .summary dt, .summary dd, .text-secondary-emphasis { color: black !important; }
+    .chart-box { break-inside: avoid; }
+    .table-responsive { overflow: visible !important; }
+}

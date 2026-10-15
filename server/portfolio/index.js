@@ -3,6 +3,7 @@ import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
 import { allocation } from '../lib/allocation.js';
 import { summariseP2p } from '../lib/p2p.js';
+import { createReports } from '../lib/reports.js';
 import { createPrices, createRates, valuePortfolio } from '../lib/valuation.js';
 import { parseMultipart } from '../multipart.js';
 import {
@@ -12,6 +13,7 @@ import {
 import { allocationContent, allocationForm } from './allocation-views.js';
 import { number, parseAccount, parseAllocation, parseBalance, parseInstrument, parseTransaction, transactionFields } from './forms.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from './p2p-views.js';
+import { CHART_SCRIPTS, reportsContent, yearContent, yearCsv, yearsCsv } from './reports-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
 // The signed-in pages for holdings, P2P accounts, transactions and importing statements.
@@ -27,8 +29,8 @@ export function createPortfolio({ data, market = null, render, send, message, no
     const router = express.Router();
     const form = express.urlencoded({ extended: false, limit: '2kb' });
     const upload = express.raw({ type: 'multipart/form-data', limit: '20mb' });
-    const page = (req, res, title, content, status = 200) =>
-        send(res, status, render({ title, content, session: req.session, path: req.path }));
+    const page = (req, res, title, content, status = 200, scripts = []) =>
+        send(res, status, render({ title, content, scripts, session: req.session, path: req.path }));
     const forbidden = res => send(res, 403, message({
         title: 'Form expired', text: 'This form is no longer valid. Go back, reload the page and try again.',
     }));
@@ -150,6 +152,45 @@ export function createPortfolio({ data, market = null, render, send, message, no
         if (!account || !/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) return next();
         await data.deleteBalance(account.id, req.params.date);
         res.redirect(303, `/p2p/${account.id}`);
+    });
+
+    // ── Reports ─────────────────────────────────────────────────────────────
+
+    async function reports() {
+        const [{ accounts, instruments, transactions }, prices, rates, balances, groups] = await Promise.all([
+            loadAll(), data.listPrices(), data.listFxRates(), data.listBalances(), data.listGroups(),
+        ]);
+        return createReports({
+            transactions, accounts, instruments, balances, groups,
+            priceOf: createPrices(prices), eurPer: createRates(rates), today: today(),
+        });
+    }
+    const download = (res, name, text) => {
+        res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` });
+        res.send(`\uFEFF${text}`);
+    };
+
+    router.get('/reports', async (req, res) => {
+        const r = await reports();
+        const total = r.firstDate ? { ...r.total(), firstDate: r.firstDate } : null;
+        page(req, res, 'Reports', reportsContent({ total, years: r.years.map(r.year) }), 200, total ? CHART_SCRIPTS : []);
+    });
+
+    router.get('/reports.csv', async (req, res) => {
+        const r = await reports();
+        download(res, 'invest-years.csv', yearsCsv(r.years.map(r.year)));
+    });
+
+    // /reports/2025 and /reports/2025.csv
+    router.get('/reports/:file', async (req, res, next) => {
+        const match = req.params.file.match(/^(\d{4})(\.csv)?$/);
+        if (!match) return next();
+        const r = await reports();
+        const year = Number(match[1]);
+        if (!r.years.includes(year)) return next();
+        const report = r.year(year);
+        if (match[2]) return download(res, `invest-${year}.csv`, yearCsv(report));
+        page(req, res, `Report ${year}`, yearContent({ report, years: r.years }), 200, report.groups.list.length ? CHART_SCRIPTS : []);
     });
 
     // ── Allocation ──────────────────────────────────────────────────────────

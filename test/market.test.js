@@ -112,7 +112,7 @@ function fakeNet({ failSymbol } = {}) {
     return { fetch, requests };
 }
 
-test('an update fetches prices for what is held, from the first purchase, then only what is new', async () => {
+test('an update fetches prices from the first purchase, then only what is new; sold instruments once', async () => {
     const data = await imported();
     const net = fakeNet();
     const now = () => Date.parse('2026-10-15T20:00:00Z');
@@ -120,18 +120,20 @@ test('an update fetches prices for what is held, from the first purchase, then o
     assert.deepEqual(result.problems, []);
 
     const symbols = Object.fromEntries(data.instruments.map(i => [i.symbol, i.priceSymbol]));
-    assert.deepEqual(symbols, { 'VUAA.EU': 'VUAA.L', 'OCGN.US': null, 'CLSK.US': null, 'VTI.US': 'VTI' }, 'sold instruments are skipped');
+    assert.deepEqual(symbols, { 'VUAA.EU': 'VUAA.L', 'OCGN.US': 'OCGN', 'CLSK.US': 'CLSK', 'VTI.US': 'VTI' }, 'sold ones too, to value past years');
     const yahoo = net.requests.filter(u => u.includes('yahoo'));
-    assert.equal(yahoo.length, 2);
+    assert.equal(yahoo.length, 4);
     assert.match(yahoo.find(u => u.includes('VUAA.L')), /VUAA\.L\?period1=1643068800&/, 'from the first VUAA trade, 2022-01-25');
     assert.match(net.requests.find(u => u.includes('ecb')), /D\.USD\.EUR\.SP00\.A\?startPeriod=2021-12-31/, 'rates from the first ledger row');
-    assert.equal(data.prices.length, 2);
+    assert.equal(data.prices.length, 4);
     assert.equal(data.fxRates.length, 1);
     assert.equal(data.status.prices.ok, true);
 
     net.requests.length = 0;
     await updateMarketData(data, { fetch: net.fetch, now, log: () => {} });
-    assert.ok(net.requests.filter(u => u.includes('yahoo')).every(u => u.includes('period1=1792022400')), 'from the day after the last price');
+    const again = net.requests.filter(u => u.includes('yahoo'));
+    assert.equal(again.length, 2, 'sold instruments aren\'t fetched again');
+    assert.ok(again.every(u => u.includes('period1=1792022400')), 'from the day after the last price');
     assert.match(net.requests.find(u => u.includes('ecb')), /startPeriod=2026-10-15/);
 });
 
@@ -141,7 +143,7 @@ test('a failing symbol is reported, and a fresh check isn\'t repeated', async ()
     const result = await updateMarketData(data, { fetch: net.fetch, now: () => Date.parse('2026-10-15T20:00:00Z'), log: () => {} });
     assert.match(result.problems[0], /VTI\.US \(VTI on Yahoo Finance\): Not found/);
     assert.equal(data.status.prices.ok, false);
-    assert.equal(data.prices.length, 1, 'the other one still saved');
+    assert.equal(data.prices.length, 3, 'the others still saved');
 
     const updater = createMarketUpdater(data, { fetch: net.fetch, log: () => {} });
     assert.equal(await updater.refreshIfStale(), false, 'checked moments ago');
