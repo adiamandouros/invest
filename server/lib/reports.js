@@ -195,6 +195,55 @@ export function createReports({ transactions, accounts, instruments, balances, g
             return { month, interest, dividends, tax };
         }),
         // Everything from before the first row to today, with the yearly rate (XIRR)
+        // Each allocation group's past, with holdings in today's groups: its value
+        // now, its return a year since it started (XIRR), and its return in each
+        // whole year it was held from the start (the first, partial year left out).
+        // Holdings in no group are one more, with id null ("Everything" when
+        // there are no groups).
+        groupHistory() {
+            const now = snapshot(today);
+            const keyOf = r => (r.instrumentId ? `i${r.instrumentId}` : accounts.get(r.accountId)?.kind === 'p2p' ? `a${r.accountId}` : null);
+            const groupOf = key => {
+                const id = Number(key.slice(1));
+                const groupId = (key[0] === 'i' ? instruments.get(id) : accounts.get(id))?.allocationGroupId ?? null;
+                return groupIds.has(groupId) ? groupId : null;
+            };
+            const list = [...groups.map(g => ({ id: g.id, name: g.name, targetPct: g.targetPct })),
+                { id: null, name: groups.length ? 'Not in a group' : 'Everything', targetPct: null }];
+            return list.map(g => {
+                const valueAt = snap => sumOf([...snap.items.values()].filter(i => groupOf(i.key) === g.id).map(i => i.valueEur));
+                // The group's dated EUR flows after `from`, up to `to` (null if a rate is missing)
+                const flowsBetween = (from, to) => {
+                    const list = [];
+                    for (const r of rows) {
+                        if (r.date <= from || r.date > to) continue;
+                        const key = keyOf(r);
+                        if (!key || groupOf(key) !== g.id) continue;
+                        const f = flow(r, eurPer, key[0] === 'i');
+                        if (f === null) return null;
+                        if (f !== ZERO) list.push({ date: r.date, amount: asNumber(f) });
+                    }
+                    return list;
+                };
+                const value = valueAt(now);
+                const all = flowsBetween('0000-00-00', today);
+                const years = [];
+                for (let y = firstYear ?? thisYear; y < thisYear; y++) {
+                    const from = `${y - 1}-12-31`;
+                    const to = `${y}-12-31`;
+                    const start = valueAt(snapshot(from));
+                    const end = valueAt(snapshot(to));
+                    const flows = flowsBetween(from, to);
+                    if (start === null || end === null || flows === null || start <= ZERO) continue;
+                    const rate = xirr([{ date: from, amount: -asNumber(start) }, ...flows, { date: to, amount: asNumber(end) }]);
+                    if (rate !== null) years.push({ year: y, rate });
+                }
+                return {
+                    ...g, value, years,
+                    xirr: value === null || all === null || !all.length ? null : xirr([...all, { date: today, amount: asNumber(value) }]),
+                };
+            }).filter(g => g.id !== null || (g.value !== null && g.value > ZERO));
+        },
         total() {
             const all = period(firstDate ? `${Number(firstDate.slice(0, 4)) - 1}-12-31` : today, today);
             const flows = [];

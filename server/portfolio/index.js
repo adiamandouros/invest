@@ -2,7 +2,9 @@ import { randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
 import { allocation } from '../lib/allocation.js';
+import { fixed } from '../lib/decimal.js';
 import { summariseP2p } from '../lib/p2p.js';
+import { project, spreadOf } from '../lib/projection.js';
 import { createReports } from '../lib/reports.js';
 import { createPrices, createRates, valuePortfolio } from '../lib/valuation.js';
 import { parseMultipart } from '../multipart.js';
@@ -14,6 +16,7 @@ import { allocationContent, allocationForm } from './allocation-views.js';
 import { number, parseAccount, parseAllocation, parseBalance, parseInstrument, parseTransaction, transactionFields } from './forms.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from './p2p-views.js';
 import { dashboardContent, dashboardNotices } from './dashboard-views.js';
+import { projectionContent } from './projection-views.js';
 import { CHART_SCRIPTS, reportsContent, yearContent, yearCsv, yearsCsv } from './reports-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
@@ -215,6 +218,53 @@ export function createPortfolio({ data, market = null, render, send, message, no
         const report = r.year(year);
         if (match[2]) return download(res, `invest-${year}.csv`, yearCsv(report));
         page(req, res, `Report ${year}`, yearContent({ report, years: r.years }), 200, report.groups.list.length ? CHART_SCRIPTS : []);
+    });
+
+    // ── Projection ──────────────────────────────────────────────────────────
+
+    router.get('/projection', async (req, res) => {
+        const r = await reports();
+        const history = r.firstDate ? r.groupHistory() : [];
+        const thisYear = Number(today().slice(0, 4));
+        const keyOf = g => `rate-${g.id === null ? 'none' : g.id}`;
+        // The first visit uses ten years, nothing more invested, and past returns
+        const asked = req.query.years !== undefined;
+        const values = { years: asked ? String(req.query.years) : '10', monthly: asked ? String(req.query.monthly ?? '') : '0' };
+        for (const g of history) values[keyOf(g)] = asked ? String(req.query[keyOf(g)] ?? '') : g.xirr === null ? '0' : (g.xirr * 100).toFixed(1);
+
+        const errors = {};
+        const read = (name, min, max, message) => {
+            try {
+                const v = number(values[name]);
+                if (v === null || v < BigInt(min) * 10n ** 8n || v > BigInt(max) * 10n ** 8n) throw new Error();
+                return Number(fixed(v, 4));
+            } catch {
+                errors[name] = message;
+                return null;
+            }
+        };
+        const years = read('years', 1, 50, 'Enter a whole number of years from 1 to 50.');
+        if (years !== null && !Number.isInteger(years)) errors.years = 'Enter a whole number of years from 1 to 50.';
+        const monthly = read('monthly', 0, 10_000_000, 'Enter an amount, or 0.');
+        const rates = history.map(g => read(keyOf(g), -50, 50, 'Enter a percentage from −50 to 50, like 7.'));
+
+        // The monthly amount goes by the targets when they're set, otherwise by today's values
+        const targeted = history.some(g => g.targetPct !== null)
+            && history.filter(g => g.targetPct !== null).reduce((sum, g) => sum + Number(g.targetPct), 0) === 100;
+        const weightOf = g => (targeted ? (g.targetPct === null ? 0 : Number(g.targetPct)) : Number(fixed(g.value ?? 0n)));
+        const split = !history.length ? '' : targeted
+            ? `by your targets: ${history.filter(g => g.targetPct !== null).map(g => `${g.name} ${Number(g.targetPct)}%`).join(', ')}`
+            : 'in proportion to what each group is worth now';
+
+        const projection = Object.keys(errors).length || !history.length ? null : project({
+            years, monthlyAmount: monthly,
+            groups: history.map((g, i) => ({
+                id: g.id, name: g.name, value: Number(fixed(g.value ?? 0n)), rate: rates[i] / 100,
+                spread: spreadOf(g.years.map(y => y.rate)), weight: weightOf(g),
+            })),
+        });
+        page(req, res, 'Projection', projectionContent({ history, values, errors, projection, split, thisYear }),
+            Object.keys(errors).length ? 400 : 200, projection ? CHART_SCRIPTS : []);
     });
 
     // ── Allocation ──────────────────────────────────────────────────────────

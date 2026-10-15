@@ -16,6 +16,8 @@ import { summariseP2p } from '../server/lib/p2p.js';
 import { createReports } from '../server/lib/reports.js';
 import { reportsContent, yearContent } from '../server/portfolio/reports-views.js';
 import { dashboardContent, dashboardNotices } from '../server/portfolio/dashboard-views.js';
+import { project } from '../server/lib/projection.js';
+import { projectionContent } from '../server/portfolio/projection-views.js';
 import { allocationContent, allocationForm } from '../server/portfolio/allocation-views.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from '../server/portfolio/p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
@@ -100,6 +102,15 @@ const all = {
         }),
     })),
     '/ (overview, empty)': page('Overview', dashboardContent({ total: {}, year: null, series: [], income: [], groups: null })),
+    '/projection': page('Projection', projectionContent({
+        history: reports.groupHistory(), thisYear: 2026, split: 'by your targets: P2P lending 100%',
+        values: { years: '3', monthly: '100', 'rate-1': '7' },
+        projection: project({ years: 3, monthlyAmount: 100, groups: [{ id: 1, name: 'P2P lending', value: 500, rate: 0.07, spread: 0.02, weight: 100 }] }),
+    })),
+    '/projection (errors)': page('Projection', projectionContent({
+        history: reports.groupHistory(), thisYear: 2026, values: { years: '0' }, errors: { years: 'Enter a whole number of years from 1 to 50.', 'rate-1': 'Enter a percentage.' },
+    })),
+    '/projection (empty)': page('Projection', projectionContent({ history: [], values: {}, thisYear: 2026 })),
     '/reports': render({ title: 'Reports', session, content: reportsContent({ total: { ...reports.total(), firstDate: reports.firstDate }, years: reports.years.map(reports.year) }) }),
     '/reports (empty)': page('Reports', reportsContent({ total: null, years: [] })),
     '/reports/2025': page('Report 2025', yearContent({ report: reports.year(2025), years: reports.years })),
