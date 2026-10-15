@@ -57,10 +57,15 @@ export function fill(template, values) {
 
 export const view = name => readFileSync(join(VIEWS_DIR, `${name}.html`), 'utf8');
 
-// The header's sign-out button, for a signed-in session
-function accountMenu(session) {
+// The signed-in part of the header: page links and the sign-out button
+const NAV = [['/', 'Overview'], ['/holdings', 'Holdings'], ['/transactions', 'Transactions'], ['/import', 'Import']];
+
+function navigation(session, path) {
     if (session?.stage !== 'full') return '';
-    return `            <form method="post" action="/logout" class="ms-auto">
+    const links = NAV.map(([href, label]) =>
+        `<li class="nav-item"><a class="nav-link" href="${href}"${href === path ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
+    return `            <ul class="nav">${links}</ul>
+            <form method="post" action="/logout" class="ms-auto">
                 <input type="hidden" name="_csrf" value="${escapeHtml(session.csrf)}">
                 <button type="submit" class="btn btn-outline-primary btn-sm">
                     <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Sign out
@@ -68,14 +73,15 @@ function accountMenu(session) {
             </form>`;
 }
 
-// Every page, wrapped in the shared layout. `session` is req.session.
+// Every page, wrapped in the shared layout. `session` is req.session, `path`
+// the page's path (to mark it in the navigation).
 export function createRenderer() {
     const layout = view('layout')
         .replace(/(href|src)="(\/[^"]+)"/g, (_, name, url) => `${name}="${versioned(url)}"`);
-    return ({ title, content, scripts = [], session = null }) => fill(layout, {
+    return ({ title, content, scripts = [], session = null, path = null }) => fill(layout, {
         title: escapeHtml(`${title} — Invest`),
         content,
-        account: accountMenu(session),
+        navigation: navigation(session, path),
         scripts: scripts.map(src => `    <script type="module" src="${versioned(src)}"></script>`).join('\n'),
     });
 }
@@ -96,7 +102,7 @@ export const messagePage = (render, { title, text, session = null }) => render({
 export function renderPages(render = createRenderer(), session = null) {
     return {
         pages: Object.fromEntries(Object.entries(PAGES)
-            .map(([path, page]) => [path, render({ title: page.title, content: view(page.view), session })])),
+            .map(([path, page]) => [path, render({ title: page.title, content: view(page.view), session, path })])),
         notFound: render({ title: 'Page not found', content: view('notfound'), session }),
     };
 }

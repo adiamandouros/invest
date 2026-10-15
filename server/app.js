@@ -2,8 +2,10 @@ import compression from 'compression';
 import express from 'express';
 import { createAuth } from './auth/index.js';
 import { createStore } from './auth/store.js';
+import { createDataStore } from './data/store.js';
 import { checkDb } from './db.js';
 import { createRenderer, messagePage, PAGES, PUBLIC_DIR, VENDOR, view } from './pages.js';
+import { createPortfolio } from './portfolio/index.js';
 import { securityHeaders } from './security.js';
 
 // LiteSpeed is the only proxy in front of the app. Trust it, the nearest hop,
@@ -14,8 +16,10 @@ const trustProxy = (address, hop) => hop === 0 && (!address || LOOPBACK.has(addr
 
 // The Express app, without listening, so tests can run it on any port.
 // `db` is a mysql2 pool, or null when the database isn't configured; tests
-// pass `store` (test/helpers/memory-store.js) instead.
-export function createApp({ db = null, store = db && createStore(db), encryptionKey = null, now = Date.now } = {}) {
+// pass `store` and `data` (test/helpers/) instead.
+export function createApp({
+    db = null, store = db && createStore(db), data = db && createDataStore(db), encryptionKey = null, now = Date.now,
+} = {}) {
     const app = express();
     app.disable('x-powered-by');
     app.set('trust proxy', trustProxy);
@@ -47,8 +51,9 @@ export function createApp({ db = null, store = db && createStore(db), encryption
 
     for (const [path, page] of Object.entries(PAGES)) {
         const content = view(page.view);
-        app.get(path, (req, res) => send(res, 200, render({ title: page.title, content, session: req.session })));
+        app.get(path, (req, res) => send(res, 200, render({ title: page.title, content, session: req.session, path })));
     }
+    if (data) app.use(createPortfolio({ data, render, send, message, now }));
 
     const notFound = view('notfound');
     app.use((req, res) => send(res, 404, render({ title: 'Page not found', content: notFound, session: req.session })));

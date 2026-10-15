@@ -2,7 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { codePage, loginPage, setupPage } from '../server/auth/views.js';
+import { readFileSync as read } from 'fs';
+import { applyImport, parseStatement, planImport } from '../server/import/index.js';
+import { positions } from '../server/lib/holdings.js';
 import { createRenderer, messagePage, renderPages } from '../server/pages.js';
+import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
+import { createMemoryData } from './helpers/memory-data.js';
 
 // Accessibility checks on every page as the server sends it (WCAG 2.2 AA
 // basics), and on the colours in style.css. Run axe-core in a real browser
@@ -11,8 +16,32 @@ import { createRenderer, messagePage, renderPages } from '../server/pages.js';
 const render = createRenderer();
 const session = { stage: 'full', csrf: 'token' };
 const { pages, notFound } = renderPages(render, session);
+
+// The portfolio pages with the made-up report imported
+const data = createMemoryData();
+const statement = parseStatement(read(new URL('./fixtures/freedom24-report.json', import.meta.url), 'utf8'));
+const plan = await planImport(statement, data);
+await applyImport(plan, data);
+const instrument = id => data.instruments.find(i => i.id === id);
+const held = [...positions(data.transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId }))).values()]
+    .map(position => ({ instrument: instrument(position.instrument), position }));
+const page = (title, content) => render({ title, content, session });
+
 const all = {
     ...pages,
+    '/holdings': page('Holdings', holdingsContent({
+        open: held.filter(h => h.position.units !== 0n),
+        closed: held.filter(h => h.position.units === 0n),
+        balances: [{ account: data.accounts[0], currency: 'USD', amount: 39223000000n }],
+    })),
+    '/holdings (empty)': page('Holdings', holdingsContent({ open: [], closed: [], balances: [] })),
+    '/transactions': page('Transactions', transactionsContent({
+        rows: data.transactions.map(t => ({ ...t, account: data.accounts[0], instrument: instrument(t.instrumentId) ?? null })),
+        instrument: data.instruments[0],
+    })),
+    '/import': page('Import', importContent({ csrf: 'token', error: 'The file isn\'t valid JSON.' })),
+    '/import/preview': page('Check the import', previewContent({ plan: { ...plan, warnings: ['A row to look at'] }, csrf: 'token', id: 'x' })),
+    '/import/confirm': page('Import finished', doneContent({ added: 18, account: 'Freedom24' })),
     '(404)': notFound,
     '(message)': messagePage(render, { title: 'Something went wrong', text: 'Try again.', session }),
     '/login': loginPage(render),
@@ -101,6 +130,7 @@ const contrast = (a, b) => {
 
 // The surfaces text sits on: page and header
 const SURFACES = ['#0f1117', '#161b27'];
+
 
 test('every text colour in style.css meets WCAG AA (4.5:1) on every surface', () => {
     const css = readFileSync(new URL('../public/css/style.css', import.meta.url), 'utf8');

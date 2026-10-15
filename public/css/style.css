@@ -43,6 +43,20 @@ body {
     min-height: 44px;
 }
 
+.site-header .nav-link {
+    color: #c5cad6;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+}
+
+.site-header .nav-link[aria-current="page"] {
+    color: #e8eaf0;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 6px;
+}
+
 main:focus {
     outline: none;
 }
@@ -92,6 +106,13 @@ textarea:focus-visible {
     width: 100%;
     max-width: 220px;
     border-radius: 8px;
+}
+
+/* ── Tables ── */
+
+/* Wide tables scroll sideways on phones; keep the scrollbar dark */
+.table-responsive {
+    scrollbar-color: #4a5160 #161b27;
 }
 
 /* ── Buttons ── */

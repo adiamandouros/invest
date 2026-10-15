@@ -6,7 +6,7 @@ Runs at https://invest.sonovabitc.win (Mediahost cPanel, Node.js 20, MySQL).
 
 ## Status
 
-Phases 0 and 1 of the plan: the app skeleton, database, deployment, and sign-in (password + authenticator code). Next up are ETF transactions, then daily prices and FX, P2P accounts, the dashboard and charts, the yearly tax summary, and statement imports.
+Phases 0 and 1 of the plan are live: the app skeleton, database, deployment, and sign-in (password + authenticator code). Phase 2 has started: accounts, instruments, a transaction ledger, Freedom24 statement imports and a holdings page with cost basis. Next up are forms to add and edit entries by hand, then daily prices and FX, P2P accounts, the dashboard and charts, the yearly tax summary, and P2P statement imports.
 
 ## Running locally
 
@@ -29,6 +29,14 @@ Every page needs a signed-in session, except `/login`, `/health` and the static 
 - Five wrong attempts block a client for 15 minutes. Ten in a row lock the user for 15 minutes, from everywhere. Changing the password or resetting the authenticator signs out every device.
 
 On the server, run the script from cPanel → Terminal: `cd ~/repositories/invest && source ~/nodevenv/repositories/invest/20/bin/activate && npm run create-user`.
+
+## Holdings and imports
+
+Every account (a broker or a P2P platform) has one ledger in the `transactions` table: buys, sells, dividends, withheld tax, fees, deposits, withdrawals, transfers and currency exchanges. Each row's `amount` is its signed cash effect, so cash balances are plain sums. `server/lib/holdings.js` turns the ledger into holdings: units, cost basis (FIFO, fees included, in EUR at the rate on the day) and realised gains.
+
+**Freedom24:** in Freedom24, open Reports → Broker report, choose the whole period and the JSON format, then upload the file on the app's Import page. The preview shows what's new and compares the result with the report's closing cash and positions before anything is saved. Each row is saved with Freedom24's own ID, so importing the same or an overlapping report again only adds what's new.
+
+Never commit a real statement: the repository is public. Tests use the made-up `test/fixtures/freedom24-report.json`.
 
 ## Database
 
