@@ -1,0 +1,71 @@
+{
+    "_about": "A made-up Freedom24 broker report in the real report's shape (only the fields the importer reads), for test/import.test.js. The expected results are worked out by hand in that file.",
+    "date_start": "2021-12-31 23:59:59",
+    "date_end": "2026-10-15 23:59:59",
+    "plainAccountInfoData": {
+        "client_name": "Test Client",
+        "client_code": "100001",
+        "base_currency": "EUR",
+        "client_date_open": "2021-07-17"
+    },
+    "trades": {
+        "detailed": [
+            { "trade_id": 1, "short_date": "2022-01-25", "instr_nm": "USD/EUR", "instr_type": 6, "instr_kind": "валюта", "issue_nb": "", "isin": "-", "operation": "buy", "p": 0.9, "curr_c": "EUR", "q": 1000, "summ": 900, "commission": 0, "commission_currency": "EUR", "comment": " Market: currencies " },
+            { "trade_id": 2, "short_date": "2022-01-25", "instr_nm": "VUAA.EU", "instr_type": 1, "instr_kind": "фонд/ETF", "issue_nb": "IE00BFMXXD54", "isin": "IE00BFMXXD54", "operation": "buy", "p": 80, "curr_c": "USD", "q": 10, "summ": 800, "commission": 2.21, "commission_currency": "EUR", "comment": " Market: europe, trade currency: USD.  Currency exchange of trade (USD) to a currency exchange of the service plan (EUR) is 0.9000.  Additional commissions for a trade have been added: 2 EUR " },
+            { "trade_id": 5, "short_date": "2022-11-23", "instr_nm": "OCGN.US", "instr_type": 1, "instr_kind": "акция обыкновенная", "issue_nb": "US67577C1053", "isin": "US67577C1053", "operation": "sell", "p": 1.5, "curr_c": "USD", "q": 1, "summ": 1.5, "commission": 1.97, "commission_currency": "EUR", "comment": " Currency exchange of trade (USD) to a currency exchange of the service plan (EUR) is 0.9755.  " },
+            { "trade_id": 6, "short_date": "2022-11-23", "instr_nm": "USD/EUR", "instr_type": 6, "instr_kind": "валюта", "issue_nb": "", "isin": "-", "operation": "sell", "p": 0.95, "curr_c": "EUR", "q": 4, "summ": 3.8, "commission": 0, "commission_currency": "EUR", "comment": "" },
+            { "trade_id": 7, "short_date": "2022-11-23", "instr_nm": "CLSK.US", "instr_type": 1, "instr_kind": "акция обыкновенная", "issue_nb": "US18452B2097", "isin": "US18452B2097", "operation": "sell", "p": 2, "curr_c": "USD", "q": 1, "summ": 2, "commission": 1.97, "commission_currency": "EUR", "comment": " Currency exchange of trade (USD) to a currency exchange of the service plan (EUR) is 0.9755.  " },
+            { "trade_id": 3, "short_date": "2023-03-02", "instr_nm": "VTI.US", "instr_type": 1, "instr_kind": "фонд/ETF", "issue_nb": "US9229087690", "isin": "US9229087690", "operation": "buy", "p": 150, "curr_c": "USD", "q": 1, "summ": 150, "commission": 0, "commission_currency": "EUR", "comment": " Currency exchange of trade (USD) to a currency exchange of the service plan (EUR) is 0.9400. " },
+            { "trade_id": 4, "short_date": "2024-10-02", "instr_nm": "VUAA.EU", "instr_type": 1, "instr_kind": "фонд/ETF", "issue_nb": "IE00BFMXXD54", "isin": "IE00BFMXXD54", "operation": "sell", "p": 110, "curr_c": "USD", "q": 4, "summ": 440, "commission": 2.18, "commission_currency": "EUR", "comment": " Currency exchange of trade (USD) to a currency exchange of the service plan (EUR) is 0.9000.  " }
+        ]
+    },
+    "account_at_start": {
+        "account": {
+            "positions_from_ts": {
+                "ps": {
+                    "acc": [{ "curr": "EUR", "s": 0 }, { "curr": "USD", "s": 0 }],
+                    "pos": [{ "i": "OCGN.US", "q": 1, "curr": "USD", "name": "Ocugen Inc", "issue_nb": "US67577C1053", "k": 1, "bal_price_a": 0 }]
+                }
+            }
+        }
+    },
+    "account_at_end": {
+        "account": {
+            "positions_from_ts": {
+                "ps": {
+                    "acc": [{ "curr": "EUR", "s": 95.47 }, { "curr": "USD", "s": 392.23 }],
+                    "pos": [
+                        { "i": "VTI.US", "q": 1, "curr": "USD", "name": "Vanguard Total Stock Market ETF", "issue_nb": "US9229087690", "k": 7 },
+                        { "i": "VUAA.EU", "q": 6, "curr": "USD", "name": "Vanguard S&P 500 UCITS ETF", "issue_nb": "IE00BFMXXD54", "k": 7 }
+                    ]
+                }
+            }
+        }
+    },
+    "securities_in_outs": [
+        { "id": 7001, "quantity": "1.00000000", "ticker": "CLSK.US", "type": "stock_award", "datetime": "2022-07-29 16:31:08", "cost": "0.00000000", "balance_currency": "USD", "comment": " Crediting the account with stocks under the bonus program " }
+    ],
+    "cash_in_outs": [
+        { "id": 101, "currency": "EUR", "type": "bank", "datetime": "2022-01-24 00:00:00", "amount": "1000.00000000", "offbalance": null, "ticker": null, "comment": " Top up account through a bank transfer " },
+        { "id": 102, "currency": "USD", "type": "dividend", "datetime": "2023-03-31 15:14:48", "amount": "0.79000000", "offbalance": null, "ticker": "VTI.US", "comment": "Dividends on security (VTI.US)" },
+        { "id": 103, "currency": "USD", "type": "tax", "datetime": "2023-03-31 15:14:48", "amount": "-0.24000000", "offbalance": null, "ticker": "VTI.US", "comment": "Tax for a corporate action on security (VTI.US). Tax rate 30" },
+        { "id": 104, "currency": "USD", "type": "intercompany", "datetime": "2023-04-27 17:18:04", "amount": "-50.00000000", "offbalance": null, "ticker": null, "comment": " Money transfer to account D100001 " },
+        { "id": 105, "currency": "USD", "type": "intercompany", "datetime": "2023-06-13 13:06:03", "amount": "60.00000000", "offbalance": null, "ticker": null, "comment": " Money transfer to account 100001 " },
+        { "id": 106, "currency": "USD", "type": "block_commission", "datetime": "2024-10-02 16:57:06", "amount": "-7.82000000", "offbalance": null, "ticker": null, "comment": "Commission for withdrawal of funds ordered by 900001" },
+        { "id": 107, "currency": "USD", "type": "block_commission", "datetime": "2024-10-02 16:57:06", "amount": "7.82000000", "offbalance": 854, "ticker": null, "comment": "Commission for withdrawal of funds ordered by 900001" },
+        { "id": 108, "currency": "USD", "type": "block", "datetime": "2024-10-02 16:57:06", "amount": "100.00000000", "offbalance": 69, "ticker": null, "comment": "Lock. Withdrawal of funds" },
+        { "id": 109, "currency": "USD", "type": "block", "datetime": "2024-10-02 16:57:06", "amount": "-100.00000000", "offbalance": null, "ticker": null, "comment": "Lock. Withdrawal of funds" },
+        { "id": 110, "currency": "USD", "type": "unblock", "datetime": "2024-10-03 17:30:05", "amount": "-100.00000000", "offbalance": 69, "ticker": null, "comment": "Unlocking. Withdrawal of funds" },
+        { "id": 111, "currency": "USD", "type": "unblock", "datetime": "2024-10-03 17:30:05", "amount": "100.00000000", "offbalance": null, "ticker": null, "comment": "Unlocking. Withdrawal of funds" },
+        { "id": 112, "currency": "USD", "type": "bank", "datetime": "2024-10-03 17:30:05", "amount": "-100.00000000", "offbalance": null, "ticker": null, "comment": "Debit. Withdrawal of funds" },
+        { "id": 113, "currency": "USD", "type": "unblock_commission", "datetime": "2024-10-03 17:30:05", "amount": "7.82000000", "offbalance": null, "ticker": null, "comment": "Commission for withdrawal of funds ordered by 900001" },
+        { "id": 114, "currency": "USD", "type": "unblock_commission", "datetime": "2024-10-03 17:30:05", "amount": "-7.82000000", "offbalance": 854, "ticker": null, "comment": "Commission for withdrawal of funds ordered by 900001" }
+    ],
+    "commissions": {
+        "detailed": [
+            { "sum": "2.21", "currency": "EUR", "type": "For trade: 2", "comment": "", "datetime": "2022-01-25 23:00:00" },
+            { "sum": "0.00", "currency": "EUR", "type": "Interest on the use of funds EUR", "comment": "", "datetime": "2022-01-26 23:00:00" },
+            { "sum": "7.82", "currency": "USD", "type": "Other fees", "comment": "Commission for withdrawal of funds ordered by 900001", "datetime": "2024-10-03 17:30:05" }
+        ]
+    }
+}
