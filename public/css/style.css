@@ -243,3 +243,9 @@ textarea:focus-visible,
     .chart-box { break-inside: avoid; }
     .table-responsive { overflow: visible !important; }
 }
+
+/* The figures under a chart, closed until asked for */
+.chart-figures summary {
+    padding: 0.65rem 0;
+    cursor: pointer;
+}

@@ -14,6 +14,7 @@ import { dec } from '../server/lib/decimal.js';
 import { summariseP2p } from '../server/lib/p2p.js';
 import { createReports } from '../server/lib/reports.js';
 import { reportsContent, yearContent } from '../server/portfolio/reports-views.js';
+import { dashboardContent, dashboardNotices } from '../server/portfolio/dashboard-views.js';
 import { allocationContent, allocationForm } from '../server/portfolio/allocation-views.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from '../server/portfolio/p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
@@ -90,6 +91,14 @@ const all = {
         values: { name0: 'S&P 500', target0: '60', name1: 'International', target1: 'x' },
         errors: { target1: 'Enter a percentage from 0 to 100.', total: 'The targets add up to 60%; make them add up to 100%.' },
     })),
+    '/ (overview)': page('Overview', dashboardContent({
+        total: valuation.total, year: reports.year(2026), series: reports.series(), income: reports.income(), groups: reports.total().groups,
+        notices: dashboardNotices({
+            valuation, instruments: new Map(data.instruments.map(i => [i.id, i])), today: '2026-10-15', updating: true,
+            p2p: [{ account: p2pAccount, lastDate: '2025-03-31' }], unassigned: [{ name: 'VTI.US' }],
+        }),
+    })),
+    '/ (overview, empty)': page('Overview', dashboardContent({ total: {}, year: null, series: [], income: [], groups: null })),
     '/reports': render({ title: 'Reports', session, content: reportsContent({ total: { ...reports.total(), firstDate: reports.firstDate }, years: reports.years.map(reports.year) }) }),
     '/reports (empty)': page('Reports', reportsContent({ total: null, years: [] })),
     '/reports/2025': page('Report 2025', yearContent({ report: reports.year(2025), years: reports.years })),

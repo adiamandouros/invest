@@ -54,11 +54,12 @@ export function createApp({
     app.use(auth.router);
     app.use(auth.requireLogin);
 
+    // The portfolio pages, including the overview at /; without data, the fixed pages
+    if (data) app.use(createPortfolio({ data, market, render, send, message, now }));
     for (const [path, page] of Object.entries(PAGES)) {
         const content = view(page.view);
         app.get(path, (req, res) => send(res, 200, render({ title: page.title, content, session: req.session, path })));
     }
-    if (data) app.use(createPortfolio({ data, market, render, send, message, now }));
 
     const notFound = view('notfound');
     app.use((req, res) => send(res, 404, render({ title: 'Page not found', content: notFound, session: req.session })));

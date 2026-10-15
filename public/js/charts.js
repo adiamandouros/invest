@@ -12,6 +12,37 @@ const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const colour = (name, i) => (name === 'Not in a group' ? OTHER : COLOURS[i % COLOURS.length]);
 const percentLabel = value => `${Number(value).toFixed(1)}%`;
+const euros = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' });
+const euroLabel = value => euros.format(value).replace('-', '−');
+const roundEuros = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+
+// Lines (value over time) or stacked bars (income) in euros
+function inEuros(canvas, data, line) {
+    return new Chart(canvas, {
+        type: line ? 'line' : 'bar',
+        data: {
+            labels: data.labels,
+            datasets: data.series.map((s, i) => ({
+                label: s.name, data: s.values, backgroundColor: COLOURS[i], borderColor: COLOURS[i],
+                // The second line (money put in) dashed, so the two differ by more than colour
+                borderDash: line && i > 0 ? [6, 4] : [], pointRadius: 0, pointHitRadius: 8, borderWidth: 2, stepped: line && i > 0,
+            })),
+        },
+        options: {
+            animation: still ? false : undefined,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { stacked: !line, ticks: { color: TEXT, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: GRID } },
+                y: { stacked: !line, beginAtZero: true, ticks: { color: TEXT, callback: value => roundEuros.format(value) }, grid: { color: GRID } },
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { color: TEXT } },
+                tooltip: { callbacks: { label: item => `${item.dataset.label}: ${euroLabel(item.raw)}` } },
+            },
+        },
+    });
+}
 
 function doughnut(canvas, data) {
     const total = data.values.reduce((sum, v) => sum + (v ?? 0), 0);
@@ -68,4 +99,5 @@ for (const canvas of document.querySelectorAll('canvas[data-chart]')) {
     const data = JSON.parse(source.textContent);
     if (data.type === 'doughnut') doughnut(canvas, data);
     else if (data.type === 'stacked') stacked(canvas, data);
+    else if (data.type === 'line' || data.type === 'bars') inEuros(canvas, data, data.type === 'line');
 }
