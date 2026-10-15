@@ -83,3 +83,56 @@ test('uploads need the form token and a readable report', async () => {
         app.close();
     }
 });
+
+test('adding, editing and deleting a transaction, with errors shown on the form', async () => {
+    const app = await start();
+    try {
+        const b = app.browser();
+        await signUp(b, app.clock);
+        assert.equal(location(await b.get('/transactions/new')), '/accounts/new', 'an account comes first');
+
+        let html = await (await b.get('/accounts/new')).text();
+        assert.equal(location(await b.post('/accounts', { _csrf: csrfOf(html), name: 'Mintos', kind: 'p2p', platform: 'mintos', baseCurrency: 'EUR' })), '/accounts');
+        html = await (await b.get('/instruments/new')).text();
+        assert.equal(location(await b.post('/instruments', {
+            _csrf: csrfOf(html), symbol: 'VUAA.DE', name: 'Vanguard S&P 500', isin: 'IE00BFMXXD54', kind: 'etf', currency: 'EUR', distributing: 'no',
+        })), '/instruments');
+        const duplicate = await b.post('/instruments', { _csrf: csrfOf(html), symbol: 'X', name: 'X', isin: 'IE00BFMXXD54', kind: 'etf', currency: 'EUR' });
+        assert.equal(duplicate.status, 400);
+        assert.match(await duplicate.text(), /Another instrument already has this ISIN/);
+
+        html = await (await b.get('/transactions/new')).text();
+        const csrf = csrfOf(html);
+        const bad = await b.post('/transactions', { _csrf: csrf, type: 'buy', date: '2026-10-15', account: '1', instrument: '1', units: 'two', price: '100', currency: 'EUR' });
+        assert.equal(bad.status, 400);
+        const badHtml = await bad.text();
+        assert.match(badHtml, /role="alert"[\s\S]*href="#f-units"/, 'an error summary linking to the field');
+        assert.match(badHtml, /id="f-units"[^>]*aria-describedby="f-units-hint f-units-error"[^>]*aria-invalid="true"|aria-invalid="true"[^>]*id="f-units"/);
+        assert.match(badHtml, /value="two"/, 'what was typed is kept');
+
+        const added = await b.post('/transactions', { _csrf: csrf, type: 'buy', date: '2026-10-15', account: '1', instrument: '1', units: '2', price: '100', fee: '1', currency: 'EUR' });
+        assert.equal(location(added), '/transactions?instrument=1');
+        const [t] = app.data.transactions;
+        assert.deepEqual([t.amount, t.fee, t.fxToEur], ['-200', '1', '1']);
+        assert.match(await (await b.get('/holdings')).text(), /€201\.00/, 'cost with the fee');
+
+        const edit = await (await b.get(`/transactions/${t.id}/edit`)).text();
+        assert.match(edit, /id="f-amount"[^>]*value="200"|value="200"[^>]*id="f-amount"/);
+        await b.post(`/transactions/${t.id}`, { _csrf: csrf, type: 'buy', date: '2026-10-14', account: '1', instrument: '1', units: '3', price: '100', currency: 'EUR' });
+        assert.deepEqual([app.data.transactions[0].units, app.data.transactions[0].date], ['3', '2026-10-14']);
+
+        assert.match(await (await b.get(`/transactions/${t.id}/delete`)).text(), /Delete this transaction\?/);
+        assert.equal((await b.post(`/transactions/${t.id}/delete`, {})).status, 403, 'needs the token');
+        assert.equal(location(await b.post(`/transactions/${t.id}/delete`, { _csrf: csrf })), '/transactions?instrument=1');
+        assert.equal(app.data.transactions.length, 0);
+        assert.equal((await b.get(`/transactions/${t.id}/edit`)).status, 404);
+
+        await b.post('/instruments/1', { _csrf: csrf, symbol: 'VUAA.DE', name: 'Renamed', isin: 'IE00BFMXXD54', kind: 'etf', currency: 'EUR', distributing: 'yes' });
+        assert.deepEqual([app.data.instruments[0].name, app.data.instruments[0].distributing], ['Renamed', true]);
+        assert.match(await (await b.get('/instruments')).text(), /Distributing/);
+        await b.post('/accounts/1', { _csrf: csrf, name: 'Mintos EUR', kind: 'p2p', platform: 'mintos', baseCurrency: 'EUR' });
+        assert.match(await (await b.get('/accounts')).text(), /Mintos EUR/);
+    } finally {
+        app.close();
+    }
+});

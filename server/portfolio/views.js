@@ -78,7 +78,8 @@ ${balances.length ? table('cash-heading', 'Cash', th('Account') + th('Currency')
 // `rows`: transactions with .account and .instrument attached
 export function transactionsContent({ rows, instrument }) {
     const heading = instrument ? `Transactions: ${esc(instrument.symbol)}` : 'Transactions';
-    if (!rows.length) return `<h1 class="fs-3">${heading}</h1>\n${NOTHING_YET}`;
+    const add = `<p><a href="/transactions/new${instrument ? `?instrument=${instrument.id}` : ''}" class="btn btn-outline-primary">Add a transaction</a></p>`;
+    if (!rows.length) return `<h1 class="fs-3">${heading}</h1>\n${add}\n${NOTHING_YET}`;
     const body = [...rows].reverse().map(t => `            <tr>
                 ${td(`<span class="text-nowrap">${esc(t.date)}</span>`)}
                 ${td(esc(TYPE_LABELS[t.type] ?? t.type))}
@@ -88,10 +89,12 @@ export function transactionsContent({ rows, instrument }) {
                 ${td(money(dec(t.amount), t.currency, { signed: true }), true)}
                 ${td(dec(t.fee) ? money(dec(t.fee), t.feeCurrency ?? t.currency) : '—', true)}
                 ${td(esc(t.account.name))}
+                ${td(`<a href="/transactions/${t.id}/edit">Edit<span class="visually-hidden"> ${esc(t.date)} ${esc(TYPE_LABELS[t.type] ?? t.type)}</span></a>`)}
             </tr>`).join('\n');
     return `<h1 class="fs-3">${heading}</h1>
-${instrument ? `<p>${esc(instrument.name)}${instrument.isin ? ` · ${esc(instrument.isin)}` : ''} · <a href="/transactions">All transactions</a></p>` : ''}
-${table('transactions-heading', `${rows.length} transaction${rows.length === 1 ? '' : 's'}, newest first`, th('Date') + th('Type') + th('Instrument') + th('Units', true) + th('Price', true) + th('Amount', true) + th('Fee', true) + th('Account'), body)}`;
+${instrument ? `<p>${esc(instrument.name)}${instrument.isin ? ` · ${esc(instrument.isin)}` : ''} · <a href="/instruments/${instrument.id}/edit">Edit instrument</a> · <a href="/transactions">All transactions</a></p>` : ''}
+${add}
+${table('transactions-heading', `${rows.length} transaction${rows.length === 1 ? '' : 's'}, newest first`, th('Date') + th('Type') + th('Instrument') + th('Units', true) + th('Price', true) + th('Amount', true) + th('Fee', true) + th('Account') + '<th scope="col"><span class="visually-hidden">Actions</span></th>', body)}`;
 }
 
 export const importContent = ({ csrf, error = '' }) => `<h1 class="fs-3">Import a statement</h1>

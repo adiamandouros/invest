@@ -4,7 +4,12 @@ import { applyImport, parseStatement, planImport } from '../import/index.js';
 import { ZERO } from '../lib/decimal.js';
 import { cash, positions } from '../lib/holdings.js';
 import { parseMultipart } from '../multipart.js';
-import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from './views.js';
+import {
+    accountFields, accountForm, accountsContent, deleteTransactionContent, instrumentFields, instrumentForm,
+    instrumentsContent, transactionForm,
+} from './edit-views.js';
+import { parseAccount, parseInstrument, parseTransaction, transactionFields } from './forms.js';
+import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
 // The signed-in pages for holdings, transactions and importing statements.
 // `data`: server/data/store.js. `render`, `send`, `message`: from server/app.js.
@@ -70,6 +75,154 @@ export function createPortfolio({ data, render, send, message, now = Date.now })
             .filter(t => !instrument || t.instrumentId === instrument.id)
             .map(t => ({ ...t, account: accounts.get(t.accountId), instrument: instruments.get(t.instrumentId) ?? null }));
         page(req, res, instrument ? `${instrument.symbol} transactions` : 'Transactions', transactionsContent({ rows, instrument }));
+    });
+
+    // ── Adding and editing transactions ─────────────────────────────────────
+
+    const choices = async () => ({ accounts: await data.listAccounts(), instruments: await data.listInstruments() });
+    const id = req => Number(req.params.id);
+    const today = () => new Date(now()).toISOString().slice(0, 10);
+    const checked = (req, res) => {
+        if (sameString(req.body?._csrf, req.session.csrf)) return true;
+        forbidden(res);
+        return false;
+    };
+    const backTo = t => (t.instrumentId ? `/transactions?instrument=${t.instrumentId}` : '/transactions');
+
+    router.get('/transactions/new', async (req, res) => {
+        const { accounts, instruments } = await choices();
+        if (!accounts.length) return res.redirect(303, '/accounts/new');
+        const instrument = instruments.find(i => i.id === Number(req.query.instrument));
+        page(req, res, 'Add a transaction', transactionForm({
+            action: '/transactions', csrf: req.session.csrf, accounts, instruments,
+            values: { type: 'buy', date: today(), account: String(accounts[0].id), instrument: instrument ? String(instrument.id) : '', currency: instrument?.currency ?? 'EUR' },
+        }));
+    });
+
+    router.post('/transactions', form, async (req, res) => {
+        if (!checked(req, res)) return;
+        const { accounts, instruments } = await choices();
+        const { values, errors } = parseTransaction(req.body, { accounts, instruments });
+        if (Object.keys(errors).length) {
+            return page(req, res, 'Add a transaction', transactionForm({ action: '/transactions', csrf: req.session.csrf, accounts, instruments, values: req.body, errors }), 400);
+        }
+        await data.createTransaction(values);
+        res.redirect(303, backTo(values));
+    });
+
+    router.get('/transactions/:id/edit', async (req, res, next) => {
+        const transaction = await data.getTransaction(id(req));
+        if (!transaction) return next();
+        const { accounts, instruments } = await choices();
+        page(req, res, 'Edit transaction', transactionForm({
+            action: `/transactions/${transaction.id}`, csrf: req.session.csrf, accounts, instruments, transaction, values: transactionFields(transaction),
+        }));
+    });
+
+    router.post('/transactions/:id', form, async (req, res, next) => {
+        if (!checked(req, res)) return;
+        const transaction = await data.getTransaction(id(req));
+        if (!transaction) return next();
+        const { accounts, instruments } = await choices();
+        const { values, errors } = parseTransaction(req.body, { accounts, instruments });
+        if (Object.keys(errors).length) {
+            return page(req, res, 'Edit transaction', transactionForm({
+                action: `/transactions/${transaction.id}`, csrf: req.session.csrf, accounts, instruments, transaction, values: req.body, errors,
+            }), 400);
+        }
+        await data.updateTransaction(transaction.id, values);
+        res.redirect(303, backTo(values));
+    });
+
+    router.get('/transactions/:id/delete', async (req, res, next) => {
+        const transaction = await data.getTransaction(id(req));
+        if (!transaction) return next();
+        const instrument = transaction.instrumentId ? await data.getInstrument(transaction.instrumentId) : null;
+        const description = [transaction.date, TYPE_LABELS[transaction.type], instrument?.symbol,
+            transaction.units && `${Number(transaction.units)} units`, `${Number(transaction.amount)} ${transaction.currency}`].filter(Boolean).join(', ');
+        page(req, res, 'Delete transaction', deleteTransactionContent({ transaction, csrf: req.session.csrf, description }));
+    });
+
+    router.post('/transactions/:id/delete', form, async (req, res, next) => {
+        if (!checked(req, res)) return;
+        const transaction = await data.getTransaction(id(req));
+        if (!transaction) return next();
+        await data.deleteTransaction(transaction.id);
+        res.redirect(303, backTo(transaction));
+    });
+
+    // ── Instruments ─────────────────────────────────────────────────────────
+
+    const DUPLICATE_ISIN = { isin: 'Another instrument already has this ISIN.' };
+    const saveInstrument = async (req, res, { save, title, action, editing }) => {
+        const { values, errors } = parseInstrument(req.body);
+        const again = extra => page(req, res, title, instrumentForm({ action, csrf: req.session.csrf, values: req.body, errors: { ...errors, ...extra }, editing }), 400);
+        if (Object.keys(errors).length) return again();
+        try {
+            await save(values);
+        } catch (err) {
+            if (err.code === 'ER_DUP_ENTRY') return again(DUPLICATE_ISIN);
+            throw err;
+        }
+        res.redirect(303, '/instruments');
+    };
+
+    router.get('/instruments', async (req, res) => page(req, res, 'Instruments', instrumentsContent({ instruments: await data.listInstruments() })));
+    router.get('/instruments/new', (req, res) => page(req, res, 'Add an instrument', instrumentForm({
+        action: '/instruments', csrf: req.session.csrf, values: { kind: 'etf', currency: 'EUR' },
+    })));
+    router.post('/instruments', form, async (req, res) => {
+        if (!checked(req, res)) return;
+        await saveInstrument(req, res, { save: data.createInstrument, title: 'Add an instrument', action: '/instruments' });
+    });
+    router.get('/instruments/:id/edit', async (req, res, next) => {
+        const instrument = await data.getInstrument(id(req));
+        if (!instrument) return next();
+        page(req, res, 'Edit instrument', instrumentForm({
+            action: `/instruments/${instrument.id}`, csrf: req.session.csrf, values: instrumentFields(instrument), editing: true,
+        }));
+    });
+    router.post('/instruments/:id', form, async (req, res, next) => {
+        if (!checked(req, res)) return;
+        const instrument = await data.getInstrument(id(req));
+        if (!instrument) return next();
+        await saveInstrument(req, res, {
+            save: values => data.updateInstrument(instrument.id, values), title: 'Edit instrument', action: `/instruments/${instrument.id}`, editing: true,
+        });
+    });
+
+    // ── Accounts ────────────────────────────────────────────────────────────
+
+    router.get('/accounts', async (req, res) => page(req, res, 'Accounts', accountsContent({ accounts: await data.listAccounts() })));
+    router.get('/accounts/new', (req, res) => page(req, res, 'Add an account', accountForm({
+        action: '/accounts', csrf: req.session.csrf, values: { kind: 'broker', baseCurrency: 'EUR' },
+    })));
+    router.post('/accounts', form, async (req, res) => {
+        if (!checked(req, res)) return;
+        const { values, errors } = parseAccount(req.body);
+        if (Object.keys(errors).length) {
+            return page(req, res, 'Add an account', accountForm({ action: '/accounts', csrf: req.session.csrf, values: req.body, errors }), 400);
+        }
+        await data.createAccount(values);
+        res.redirect(303, '/accounts');
+    });
+    router.get('/accounts/:id/edit', async (req, res, next) => {
+        const account = await data.getAccount(id(req));
+        if (!account) return next();
+        page(req, res, 'Edit account', accountForm({
+            action: `/accounts/${account.id}`, csrf: req.session.csrf, values: accountFields(account), editing: true,
+        }));
+    });
+    router.post('/accounts/:id', form, async (req, res, next) => {
+        if (!checked(req, res)) return;
+        const account = await data.getAccount(id(req));
+        if (!account) return next();
+        const { values, errors } = parseAccount(req.body);
+        if (Object.keys(errors).length) {
+            return page(req, res, 'Edit account', accountForm({ action: `/accounts/${account.id}`, csrf: req.session.csrf, values: req.body, errors, editing: true }), 400);
+        }
+        await data.updateAccount(account.id, values);
+        res.redirect(303, '/accounts');
     });
 
     // ── Importing statements ────────────────────────────────────────────────

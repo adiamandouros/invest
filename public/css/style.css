@@ -151,3 +151,15 @@ textarea:focus-visible {
     --bs-btn-active-border-color: #8bb9fe;
     --bs-btn-focus-shadow-rgb: 110, 168, 254;
 }
+
+/* Bootstrap's #dc3545 is only 4.2:1 on the dark page; use a lighter red */
+.btn-outline-danger {
+    --bs-btn-color: #ea868f;
+    --bs-btn-border-color: #ea868f;
+    --bs-btn-hover-color: #0f1117;
+    --bs-btn-hover-bg: #ea868f;
+    --bs-btn-hover-border-color: #ea868f;
+    --bs-btn-active-color: #0f1117;
+    --bs-btn-active-bg: #f0a3aa;
+    --bs-btn-active-border-color: #f0a3aa;
+}
