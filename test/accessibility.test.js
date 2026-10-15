@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
+import { newAuthenticatorContent, settingsContent } from '../server/auth/settings-views.js';
 import { codePage, loginPage, setupPage } from '../server/auth/views.js';
 import { readFileSync as read } from 'fs';
 import { applyImport, parseStatement, planImport } from '../server/import/index.js';
@@ -127,6 +128,15 @@ const all = {
     '/accounts/new': page('Add an account', accountForm({ action: '/accounts', csrf: 'token', values: {} })),
     '(404)': notFound,
     '(message)': messagePage(render, { title: 'Something went wrong', text: 'Try again.', session }),
+    '/settings': page('Settings', settingsContent({ csrf: 'token', username: 'me', sessions: 2, done: 'password' })),
+    '/settings (password errors)': page('Settings', settingsContent({
+        csrf: 'token', username: 'me', sessions: 1, form: 'password',
+        errors: { current: 'That isn\'t your current password.', password: 'Use at least 12 characters (this has 5).' },
+    })),
+    '/settings (authenticator errors)': page('Settings', settingsContent({ csrf: 'token', username: 'me', sessions: 1, form: 'authenticator', errors: { code: 'That code didn\'t work.' } })),
+    '/settings/authenticator': page('New authenticator app', await newAuthenticatorContent({
+        csrf: 'token', secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Invest:me?secret=JBSWY3DPEHPK3PXP', error: 'That code didn\'t work.',
+    })),
     '/login': loginPage(render),
     '/login (error)': loginPage(render, { error: 'Wrong username or password.', username: 'me' }),
     '/login/code': codePage(render, { csrf: 'token', error: 'That code didn\'t work.' }),

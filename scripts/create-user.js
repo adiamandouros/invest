@@ -8,13 +8,12 @@
 // Run it on the server (cPanel → Terminal, in the app folder), or locally
 // with DB_* pointing at the server's database through an SSH tunnel.
 import 'dotenv/config';
-import { hashPassword } from '../server/auth/password.js';
+import { hashPassword, MIN_PASSWORD } from '../server/auth/password.js';
 import { createStore } from '../server/auth/store.js';
 import { loadConfig } from '../server/config.js';
 import { connectForMigrations, createDb } from '../server/db.js';
 import { migrate } from '../server/migrate.js';
 
-const MIN_PASSWORD = 12;
 const SIGN_IN_URL = 'https://invest.sonovabitc.win/login';
 
 // ── Prompts ─────────────────────────────────────────────────────────────────

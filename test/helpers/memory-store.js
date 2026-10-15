@@ -56,6 +56,12 @@ export function createMemoryStore({ now = Date.now } = {}) {
             const { expiresAt, ...session } = s;
             return { ...session, username: users.get(s.userId).username };
         },
+        countSessions: async userId => [...sessions.values()].filter(s => s.userId === userId && s.stage === 'full' && s.expiresAt > now()).length,
+        async deleteOtherSessions(userId, keepTokenHash) {
+            let n = 0;
+            for (const [k, s] of sessions) if (s.userId === userId && k !== keepTokenHash) { sessions.delete(k); n++; }
+            return n;
+        },
         async setPendingTotp(tokenHash, sealedSecret) {
             sessions.get(tokenHash).pendingTotp = sealedSecret;
         },
@@ -70,6 +76,9 @@ export function createMemoryStore({ now = Date.now } = {}) {
         async setPassword(id, passwordHash) {
             Object.assign(users.get(id), { passwordHash, failedLogins: 0, lockedUntil: 0 });
             signOutEverywhere(id);
+        },
+        async replaceTotp(id, sealedSecret, step) {
+            Object.assign(users.get(id), { totpSecret: sealedSecret, totpLastStep: step });
         },
         async resetTotp(id) {
             Object.assign(users.get(id), { totpSecret: null, totpLastStep: null });

@@ -12,6 +12,9 @@ const P = 1;
 const KEY_LENGTH = 32;
 const MAX_MEMORY = 64 * 1024 * 1024; // N = 2^15 needs 32 MB, Node's default limit
 
+// For new passwords, here and in scripts/create-user.js
+export const MIN_PASSWORD = 12;
+
 const normalise = password => String(password).normalize('NFKC');
 
 export async function hashPassword(password) {
