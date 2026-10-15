@@ -20,3 +20,7 @@ test('PORT and DB_PORT are read as numbers', () => {
     assert.equal(config.db.port, 3307);
     assert.equal(config.db.host, 'db');
 });
+
+test('a non-numeric PORT is kept as a socket path', () => {
+    assert.equal(loadConfig({ PORT: '/tmp/lshttpd/app.sock' }).port, '/tmp/lshttpd/app.sock');
+});
