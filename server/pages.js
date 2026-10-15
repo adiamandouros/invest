@@ -51,29 +51,52 @@ const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&
 export const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ESCAPES[c]);
 
 // {{name}} is replaced as is; callers escape anything that came from a user
-function fill(template, values) {
+export function fill(template, values) {
     return template.replace(/\{\{(\w+)\}\}/g, (_, key) => values[key] ?? '');
 }
 
 export const view = name => readFileSync(join(VIEWS_DIR, `${name}.html`), 'utf8');
 
-// Every page, wrapped in the shared layout
+// The header's sign-out button, for a signed-in session
+function accountMenu(session) {
+    if (session?.stage !== 'full') return '';
+    return `            <form method="post" action="/logout" class="ms-auto">
+                <input type="hidden" name="_csrf" value="${escapeHtml(session.csrf)}">
+                <button type="submit" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Sign out
+                </button>
+            </form>`;
+}
+
+// Every page, wrapped in the shared layout. `session` is req.session.
 export function createRenderer() {
     const layout = view('layout')
         .replace(/(href|src)="(\/[^"]+)"/g, (_, name, url) => `${name}="${versioned(url)}"`);
-    return ({ title, content, scripts = [] }) => fill(layout, {
+    return ({ title, content, scripts = [], session = null }) => fill(layout, {
         title: escapeHtml(`${title} — Invest`),
         content,
+        account: accountMenu(session),
         scripts: scripts.map(src => `    <script type="module" src="${versioned(src)}"></script>`).join('\n'),
     });
 }
 
-// The fixed pages, by path (also used by test/accessibility.test.js)
-export function renderPages(render = createRenderer()) {
+// The fixed pages, by path, for signed-in users
+export const PAGES = {
+    '/': { title: 'Overview', view: 'home' },
+};
+
+// A short page with a heading and one sentence (errors, refusals)
+export const messagePage = (render, { title, text, session = null }) => render({
+    title,
+    content: fill(view('message'), { title: escapeHtml(title), text: escapeHtml(text) }),
+    session,
+});
+
+// Every fixed page as `session` would see it (used by test/accessibility.test.js)
+export function renderPages(render = createRenderer(), session = null) {
     return {
-        pages: {
-            '/': render({ title: 'Overview', content: view('home') }),
-        },
-        notFound: render({ title: 'Page not found', content: view('notfound') }),
+        pages: Object.fromEntries(Object.entries(PAGES)
+            .map(([path, page]) => [path, render({ title: page.title, content: view(page.view), session })])),
+        notFound: render({ title: 'Page not found', content: view('notfound'), session }),
     };
 }

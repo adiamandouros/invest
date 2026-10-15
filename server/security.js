@@ -20,7 +20,9 @@ export function securityHeaders(req, res, next) {
         'Content-Security-Policy': CSP,
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'DENY',
-        'Referrer-Policy': 'no-referrer',
+        // Not no-referrer: with that, browsers send "Origin: null" on form posts,
+        // and the same-site check in server/auth/index.js refuses every sign-in
+        'Referrer-Policy': 'same-origin',
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
         // A private site: keep it out of search engines

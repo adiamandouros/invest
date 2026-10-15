@@ -24,3 +24,9 @@ test('PORT and DB_PORT are read as numbers', () => {
 test('a non-numeric PORT is kept as a socket path', () => {
     assert.equal(loadConfig({ PORT: '/tmp/lshttpd/app.sock' }).port, '/tmp/lshttpd/app.sock');
 });
+
+test('ENCRYPTION_KEY is used only when it\'s at least 32 characters', () => {
+    assert.equal(loadConfig({}).encryptionKey, null);
+    assert.equal(loadConfig({ ENCRYPTION_KEY: 'short' }).encryptionKey, null);
+    assert.equal(loadConfig({ ENCRYPTION_KEY: 'k'.repeat(32) }).encryptionKey, 'k'.repeat(32));
+});

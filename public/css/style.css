@@ -57,7 +57,7 @@ textarea:focus-visible {
     box-shadow: var(--focus-ring);
 }
 
-/* ── Messages (404) ── */
+/* ── Messages (404, errors) ── */
 
 .message-view {
     display: flex;
@@ -67,13 +67,56 @@ textarea:focus-visible {
     padding: 64px 16px;
 }
 
-.message-view .btn {
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
+/* ── Sign-in ── */
+
+.auth-card {
+    max-width: 26rem;
+    margin: 32px auto;
+}
+
+.code-input {
+    font-size: 1.5rem;
+    letter-spacing: 0.3em;
+    font-variant-numeric: tabular-nums;
+}
+
+.totp-key {
+    color: #e8eaf0;
+    font-size: 1rem;
+    word-spacing: 0.3em;
+}
+
+/* The QR code keeps its white background and quiet zone, for scanning in dark mode */
+.qr-code svg {
+    display: block;
+    width: 100%;
+    max-width: 220px;
+    border-radius: 8px;
 }
 
 /* ── Buttons ── */
+
+/* 44 px touch targets */
+.btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Bootstrap's #0d6efd under white text is only 4.5:1; use the lighter accent with dark text */
+.btn-primary {
+    --bs-btn-color: #0f1117;
+    --bs-btn-bg: #6ea8fe;
+    --bs-btn-border-color: #6ea8fe;
+    --bs-btn-hover-color: #0f1117;
+    --bs-btn-hover-bg: #8bb9fe;
+    --bs-btn-hover-border-color: #8bb9fe;
+    --bs-btn-active-color: #0f1117;
+    --bs-btn-active-bg: #a8cafe;
+    --bs-btn-active-border-color: #a8cafe;
+    --bs-btn-focus-shadow-rgb: 110, 168, 254;
+}
 
 /* Bootstrap's #0d6efd is only 4.2:1 on the dark page; use the lighter accent */
 .btn-outline-primary {

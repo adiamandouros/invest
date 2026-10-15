@@ -6,18 +6,29 @@ Runs at https://invest.sonovabitc.win (Mediahost cPanel, Node.js 20, MySQL).
 
 ## Status
 
-Phase 0 of the plan: the app skeleton, database connection, migrations and deployment. Next up are sign-in (password + authenticator code), then ETF transactions, daily prices and FX, P2P accounts, the dashboard and charts, the yearly tax summary, and statement imports.
+Phases 0 and 1 of the plan: the app skeleton, database, deployment, and sign-in (password + authenticator code). Next up are ETF transactions, then daily prices and FX, P2P accounts, the dashboard and charts, the yearly tax summary, and statement imports.
 
 ## Running locally
 
 ```bash
 npm install
-cp .env.example .env   # then fill in the DB_* settings
+cp .env.example .env   # then fill in the DB_* settings and ENCRYPTION_KEY
 npm run dev            # http://localhost:3000, restarts on changes
 npm test
 ```
 
 Without the `DB_*` settings the app still starts, and `/health` reports the database as "not configured".
+
+## Signing in
+
+Every page needs a signed-in session, except `/login`, `/health` and the static files. Sign-in has two steps: username and password, then a 6-digit code from an authenticator app. Each code works only once.
+
+- **Create the user:** `npm run create-user`. It asks for a username and a password of at least 12 characters, then you sign in and scan the QR code to set up the authenticator app. Run it again for the same username to set a new password.
+- **Lost phone:** `npm run create-user -- --reset-2fa`, then sign in to set up the app again.
+- **`ENCRYPTION_KEY`** encrypts the authenticator secret in the database (see `.env.example`). If it's lost or changed, sign-in fails until you run `--reset-2fa`.
+- Five wrong attempts block a client for 15 minutes. Ten in a row lock the user for 15 minutes, from everywhere. Changing the password or resetting the authenticator signs out every device.
+
+On the server, run the script from cPanel → Terminal: `cd ~/repositories/invest && source ~/nodevenv/repositories/invest/20/bin/activate && npm run create-user`.
 
 ## Database
 
@@ -31,7 +42,7 @@ First-time setup:
 
 1. **MySQL Databases:** create the database and a user, and give the user *All privileges* on it. cPanel prefixes both names with `sonovabi_`.
 2. **Git Version Control → Create:** clone this repository into `~/repositories/invest`.
-3. **Setup Node.js App → Create:** Node.js 20, application root `repositories/invest`, URL `invest.sonovabitc.win`, startup file `start.cjs`. Set `DB_NAME`, `DB_USER` and `DB_PASSWORD` (`DB_HOST` defaults to `localhost`), either as the app's environment variables or in a `.env` file in `~/repositories/invest`. Then click *Run NPM Install* and *Restart*.
+3. **Setup Node.js App → Create:** Node.js 20, application root `repositories/invest`, URL `invest.sonovabitc.win`, startup file `start.cjs`. Set `DB_NAME`, `DB_USER`, `DB_PASSWORD` (`DB_HOST` defaults to `localhost`) and `ENCRYPTION_KEY`, either as the app's environment variables or in a `.env` file in `~/repositories/invest`. Then click *Run NPM Install* and *Restart*.
 4. **SSL/TLS Status:** make sure AutoSSL covers `invest.sonovabitc.win`.
 5. Open https://invest.sonovabitc.win/health. It should show `{"status":"ok","db":"ok"}`.
 
