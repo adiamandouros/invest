@@ -63,6 +63,12 @@ export function createStore(db) {
                 pendingTotp: row.pending_totp,
             };
         },
+        // Signed-in sessions (both steps done) that haven't expired
+        countSessions: async userId => Number((await one(
+            `SELECT COUNT(*) AS n FROM sessions WHERE user_id = ? AND stage = 'full' AND expires_at > UTC_TIMESTAMP()`, [userId])).n),
+        // Every session of the user but this one: the number deleted
+        deleteOtherSessions: async (userId, keepTokenHash) => (await run(
+            'DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?', [userId, keepTokenHash])).affectedRows,
         setPendingTotp: (tokenHash, sealedSecret) => run('UPDATE sessions SET pending_totp = ? WHERE token_hash = ?', [sealedSecret, tokenHash]),
         deleteSession: tokenHash => run('DELETE FROM sessions WHERE token_hash = ?', [tokenHash]),
         deleteExpiredSessions: () => run('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()'),
@@ -73,6 +79,8 @@ export function createStore(db) {
             await run('UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?', [passwordHash, id]);
             await signOutEverywhere(id);
         },
+        // A new authenticator secret, confirmed with a code of the given step (from the settings page)
+        replaceTotp: (id, sealedSecret, step) => run('UPDATE users SET totp_secret = ?, totp_last_step = ? WHERE id = ?', [sealedSecret, step, id]),
         async resetTotp(id) {
             await run('UPDATE users SET totp_secret = NULL, totp_last_step = NULL WHERE id = ?', [id]);
             await signOutEverywhere(id);

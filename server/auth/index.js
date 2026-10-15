@@ -1,9 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { createLimiter } from './limiter.js';
-import { verifyNoPassword, verifyPassword } from './password.js';
+import { hashPassword, MIN_PASSWORD, verifyNoPassword, verifyPassword } from './password.js';
 import { seal, unseal } from './secrets.js';
 import { generateSecret, otpauthUri, verifyCode } from './totp.js';
+import { newAuthenticatorContent, settingsContent } from './settings-views.js';
 import { codePage, loginPage, setupPage } from './views.js';
 
 // Sign-in in two steps: username and password, then a code from an
@@ -206,6 +207,124 @@ export function createAuth({ store, encryptionKey, render, send, message, now = 
             return fail(401, WRONG_CODE);
         }
         await finishLogin(req, res, user);
+    });
+
+    // ── Settings: password, authenticator app, other devices ───────────────
+
+    const settingsPage = (req, res, title, content, status = 200) =>
+        send(res, status, render({ title, content, session: req.session, path: '/settings' }));
+
+    // The signed-in user, after the form's token check; otherwise answers the request itself
+    async function settingsUser(req, res) {
+        if (req.session?.stage !== 'full') {
+            if (req.method === 'GET') res.redirect(303, '/login');
+            else send(res, 401, message({ title: 'Signed out', text: 'Sign in again to continue.' }));
+            return null;
+        }
+        if (req.method === 'POST' && !csrfOk(req)) {
+            forbidden(res);
+            return null;
+        }
+        return store.findUserById(req.session.userId);
+    }
+    const showSettings = async (req, res, extra = {}, status = 200) => settingsPage(req, res, 'Settings', settingsContent({
+        csrf: req.session.csrf, username: req.session.username, sessions: await store.countSessions(req.session.userId), ...extra,
+    }), status);
+    // Too many wrong passwords or codes, here or at sign-in
+    const tooMany = (req, user) => limiter.blocked(req.ip) || user.locked;
+    async function failed(req, user) {
+        limiter.fail(req.ip);
+        await store.recordFailedLogin(user.id, MAX_FAILURES, LOCK_SECONDS);
+    }
+
+    router.get('/settings', async (req, res) => {
+        if (!await settingsUser(req, res)) return;
+        await showSettings(req, res, { done: String(req.query.done ?? '') });
+    });
+
+    router.post('/settings/password', form, async (req, res) => {
+        const user = await settingsUser(req, res);
+        if (!user) return;
+        const fail = (errors, status = 400) => showSettings(req, res, { form: 'password', errors }, status);
+        if (tooMany(req, user)) return fail({ current: TOO_MANY }, 429);
+        const password = String(req.body?.password ?? '');
+        const errors = {};
+        if (!await verifyPassword(String(req.body?.current ?? ''), user.passwordHash)) errors.current = 'That isn\'t your current password.';
+        if (password.length < MIN_PASSWORD) errors.password = `Use at least ${MIN_PASSWORD} characters (this has ${password.length}).`;
+        else if (password.length > 200) errors.password = 'Use at most 200 characters.';
+        else if (String(req.body?.repeat ?? '') !== password) errors.repeat = 'The two new passwords aren\'t the same.';
+        if (errors.current) await failed(req, user);
+        if (Object.keys(errors).length) return fail(errors, errors.current ? 401 : 400);
+
+        // Signs out every session, this one too; then a new one here
+        await store.setPassword(user.id, await hashPassword(password));
+        limiter.reset(req.ip);
+        await startSession(res, user.id, 'full');
+        res.redirect(303, '/settings?done=password');
+    });
+
+    // Step 1: the current password and code, then a new secret for this session
+    router.post('/settings/authenticator', form, async (req, res) => {
+        const user = await settingsUser(req, res);
+        if (!user) return;
+        const fail = (errors, status) => showSettings(req, res, { form: 'authenticator', errors }, status);
+        if (tooMany(req, user)) return fail({ authCurrent: TOO_MANY }, 429);
+        if (!await verifyPassword(String(req.body?.authCurrent ?? ''), user.passwordHash)) {
+            await failed(req, user);
+            return fail({ authCurrent: 'That isn\'t your current password.' }, 401);
+        }
+        const step = user.totpSecret ? verifyCode(unseal(user.totpSecret, encryptionKey), req.body?.code, now()) : null;
+        if (step === null || !await store.useTotpStep(user.id, step)) {
+            await failed(req, user);
+            return fail({ code: WRONG_CODE }, 401);
+        }
+        await store.setPendingTotp(req.session.tokenHash, seal(generateSecret(), encryptionKey));
+        res.redirect(303, '/settings/authenticator');
+    });
+
+    router.get('/settings/authenticator', async (req, res) => {
+        if (!await settingsUser(req, res)) return;
+        if (!req.session.pendingTotp) return res.redirect(303, '/settings');
+        const secret = unseal(req.session.pendingTotp, encryptionKey);
+        settingsPage(req, res, 'New authenticator app', await newAuthenticatorContent({
+            csrf: req.session.csrf, secret, uri: otpauthUri(secret, req.session.username),
+        }));
+    });
+
+    // Step 2: a code from the new app switches to it
+    router.post('/settings/authenticator/confirm', form, async (req, res) => {
+        const user = await settingsUser(req, res);
+        if (!user) return;
+        if (!req.session.pendingTotp) return res.redirect(303, '/settings');
+        const secret = unseal(req.session.pendingTotp, encryptionKey);
+        const fail = async (status, error) => settingsPage(req, res, 'New authenticator app', await newAuthenticatorContent({
+            csrf: req.session.csrf, secret, uri: otpauthUri(secret, req.session.username), error,
+        }), status);
+        if (tooMany(req, user)) return fail(429, TOO_MANY);
+        const step = verifyCode(secret, req.body?.code, now());
+        if (step === null) {
+            await failed(req, user);
+            return fail(401, 'That code didn\'t work. Enter the newest code the new app shows for Invest.');
+        }
+        await store.replaceTotp(user.id, req.session.pendingTotp, step);
+        await store.setPendingTotp(req.session.tokenHash, null);
+        await store.deleteOtherSessions(user.id, req.session.tokenHash);
+        await store.clearFailedLogins(user.id);
+        limiter.reset(req.ip);
+        res.redirect(303, '/settings?done=authenticator');
+    });
+
+    router.post('/settings/authenticator/cancel', form, async (req, res) => {
+        if (!await settingsUser(req, res)) return;
+        await store.setPendingTotp(req.session.tokenHash, null);
+        res.redirect(303, '/settings');
+    });
+
+    router.post('/settings/sessions', form, async (req, res) => {
+        const user = await settingsUser(req, res);
+        if (!user) return;
+        await store.deleteOtherSessions(user.id, req.session.tokenHash);
+        res.redirect(303, '/settings?done=signed-out');
     });
 
     // ── Sign out (also "start over" from step 2) ────────────────────────────

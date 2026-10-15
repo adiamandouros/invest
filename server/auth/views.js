@@ -15,16 +15,23 @@ export const codePage = (render, { csrf, error = '' }) => render({
     content: fill(view('login-code'), { error: alert(error), csrf: escapeHtml(csrf) }),
 });
 
-export async function setupPage(render, { csrf, secret, uri, error = '' }) {
+// The QR code for an otpauth:// URI, as inline SVG with a text alternative
+export async function qrCode(uri) {
     const svg = await QRCode.toString(uri, { type: 'svg', margin: 2, errorCorrectionLevel: 'M' });
+    return svg.replace('<svg ', '<svg role="img" aria-label="QR code for your authenticator app" ');
+}
+
+// In groups of four, easier to type in by hand
+export const groupedKey = secret => secret.match(/.{1,4}/g).join(' ');
+
+export async function setupPage(render, { csrf, secret, uri, error = '' }) {
     return render({
         title: 'Set up your authenticator app',
         content: fill(view('login-setup'), {
             error: alert(error),
             csrf: escapeHtml(csrf),
-            qr: svg.replace('<svg ', '<svg role="img" aria-label="QR code for your authenticator app" '),
-            // In groups of four, easier to type in by hand
-            secret: secret.match(/.{1,4}/g).join(' '),
+            qr: await qrCode(uri),
+            secret: groupedKey(secret),
         }),
     });
 }

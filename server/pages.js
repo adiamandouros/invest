@@ -68,12 +68,17 @@ function navigation(session, path) {
     const links = NAV.map(([href, label]) =>
         `<li class="nav-item"><a class="nav-link" href="${href}"${href === path ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
     return `            <ul class="nav">${links}</ul>
-            <form method="post" action="/logout" class="ms-auto">
-                <input type="hidden" name="_csrf" value="${escapeHtml(session.csrf)}">
-                <button type="submit" class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Sign out
-                </button>
-            </form>`;
+            <div class="ms-auto d-flex align-items-center column-gap-2">
+                <a class="nav-link" href="/settings"${path === '/settings' ? ' aria-current="page"' : ''}>
+                    <i class="bi bi-gear me-1" aria-hidden="true"></i>Settings
+                </a>
+                <form method="post" action="/logout">
+                    <input type="hidden" name="_csrf" value="${escapeHtml(session.csrf)}">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Sign out
+                    </button>
+                </form>
+            </div>`;
 }
 
 // Every page, wrapped in the shared layout. `session` is req.session, `path`
