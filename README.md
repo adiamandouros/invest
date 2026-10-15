@@ -6,7 +6,7 @@ Runs at https://invest.sonovabitc.win (Mediahost cPanel, Node.js 20, MySQL).
 
 ## Status
 
-Phases 0 and 1 of the plan are live: the app skeleton, database, deployment, and sign-in (password + authenticator code). Phase 2 has started: accounts, instruments, a transaction ledger, Freedom24 statement imports and a holdings page with cost basis. Next up are forms to add and edit entries by hand, then daily prices and FX, P2P accounts, the dashboard and charts, the yearly tax summary, and P2P statement imports.
+Phases 0 and 1 of the plan are live: the app skeleton, database, deployment, and sign-in (password + authenticator code). Phase 2 is done: accounts, instruments, a transaction ledger, Freedom24 statement imports, a holdings page with cost basis, and forms to add, edit and delete entries by hand. Next up are daily prices and FX, P2P accounts, the dashboard and charts, the yearly tax summary, and P2P statement imports.
 
 ## Running locally
 
@@ -35,6 +35,8 @@ On the server, run the script from cPanel → Terminal: `cd ~/repositories/inves
 Every account (a broker or a P2P platform) has one ledger in the `transactions` table: buys, sells, dividends, withheld tax, fees, deposits, withdrawals, transfers and currency exchanges. Each row's `amount` is its signed cash effect, so cash balances are plain sums. `server/lib/holdings.js` turns the ledger into holdings: units, cost basis (FIFO, fees included, in EUR at the rate on the day) and realised gains.
 
 **Freedom24:** in Freedom24, open Reports → Broker report, choose the whole period and the JSON format, then upload the file on the app's Import page. The preview shows what's new and compares the result with the report's closing cash and positions before anything is saved. Each row is saved with Freedom24's own ID, so importing the same or an overlapping report again only adds what's new.
+
+**By hand:** Transactions → *Add a transaction*, or *Edit* on any row. Amounts are typed as positive numbers, and the type decides whether money came in or went out; currency exchanges are the exception, with a negative amount for the side paid. Editing an imported row keeps its link to the statement, so importing again doesn't add it back. Instruments and Accounts have their own pages, where you can say whether an ETF pays out its dividends.
 
 Never commit a real statement: the repository is public. Tests use the made-up `test/fixtures/freedom24-report.json`.
 

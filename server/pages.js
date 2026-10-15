@@ -58,7 +58,10 @@ export function fill(template, values) {
 export const view = name => readFileSync(join(VIEWS_DIR, `${name}.html`), 'utf8');
 
 // The signed-in part of the header: page links and the sign-out button
-const NAV = [['/', 'Overview'], ['/holdings', 'Holdings'], ['/transactions', 'Transactions'], ['/import', 'Import']];
+const NAV = [
+    ['/', 'Overview'], ['/holdings', 'Holdings'], ['/transactions', 'Transactions'],
+    ['/instruments', 'Instruments'], ['/accounts', 'Accounts'], ['/import', 'Import'],
+];
 
 function navigation(session, path) {
     if (session?.stage !== 'full') return '';

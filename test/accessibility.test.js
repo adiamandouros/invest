@@ -6,6 +6,9 @@ import { readFileSync as read } from 'fs';
 import { applyImport, parseStatement, planImport } from '../server/import/index.js';
 import { positions } from '../server/lib/holdings.js';
 import { createRenderer, messagePage, renderPages } from '../server/pages.js';
+import {
+    accountForm, accountsContent, deleteTransactionContent, instrumentForm, instrumentsContent, transactionForm,
+} from '../server/portfolio/edit-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
 import { createMemoryData } from './helpers/memory-data.js';
 
@@ -42,6 +45,19 @@ const all = {
     '/import': page('Import', importContent({ csrf: 'token', error: 'The file isn\'t valid JSON.' })),
     '/import/preview': page('Check the import', previewContent({ plan: { ...plan, warnings: ['A row to look at'] }, csrf: 'token', id: 'x' })),
     '/import/confirm': page('Import finished', doneContent({ added: 18, account: 'Freedom24' })),
+    '/transactions/new (errors)': page('Add a transaction', transactionForm({
+        action: '/transactions', csrf: 'token', accounts: data.accounts, instruments: data.instruments,
+        values: { type: 'buy', units: 'two' }, errors: { units: 'Enter a number.', date: 'Enter a date.' },
+    })),
+    '/transactions/1/edit': page('Edit transaction', transactionForm({
+        action: '/transactions/1', csrf: 'token', accounts: data.accounts, instruments: data.instruments,
+        transaction: data.transactions[0], values: { type: 'buy' },
+    })),
+    '/transactions/1/delete': page('Delete transaction', deleteTransactionContent({ transaction: data.transactions[0], csrf: 'token', description: 'A buy' })),
+    '/instruments': page('Instruments', instrumentsContent({ instruments: data.instruments })),
+    '/instruments/new (errors)': page('Add an instrument', instrumentForm({ action: '/instruments', csrf: 'token', values: {}, errors: { isin: 'Wrong.' } })),
+    '/accounts': page('Accounts', accountsContent({ accounts: data.accounts })),
+    '/accounts/new': page('Add an account', accountForm({ action: '/accounts', csrf: 'token', values: {} })),
     '(404)': notFound,
     '(message)': messagePage(render, { title: 'Something went wrong', text: 'Try again.', session }),
     '/login': loginPage(render),

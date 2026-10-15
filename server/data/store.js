@@ -4,12 +4,12 @@
 
 const toAccount = row => row && {
     id: row.id, name: row.name, kind: row.kind, platform: row.platform, externalRef: row.external_ref,
-    baseCurrency: row.base_currency, openedOn: row.opened_on,
+    baseCurrency: row.base_currency, openedOn: row.opened_on, notes: row.notes,
 };
 
 const toInstrument = row => row && {
     id: row.id, isin: row.isin, symbol: row.symbol, name: row.name, kind: row.kind, currency: row.currency,
-    distributing: row.distributing === null ? null : Boolean(row.distributing),
+    distributing: row.distributing === null ? null : Boolean(row.distributing), assetClass: row.asset_class,
 };
 
 const toTransaction = row => ({
@@ -26,7 +26,30 @@ export function createDataStore(db) {
         findAccount: async (platform, externalRef) =>
             toAccount((await rows('SELECT * FROM accounts WHERE platform = ? AND external_ref = ?', [platform, externalRef]))[0]) ?? null,
 
+        getAccount: async id => toAccount((await rows('SELECT * FROM accounts WHERE id = ?', [id]))[0]) ?? null,
+        async createAccount(a) {
+            const [result] = await db.query(
+                'INSERT INTO accounts (name, kind, platform, base_currency, opened_on, notes) VALUES (?, ?, ?, ?, ?, ?)',
+                [a.name, a.kind, a.platform, a.baseCurrency, a.openedOn, a.notes]);
+            return result.insertId;
+        },
+        updateAccount: (id, a) => db.query(
+            'UPDATE accounts SET name = ?, kind = ?, platform = ?, base_currency = ?, opened_on = ?, notes = ? WHERE id = ?',
+            [a.name, a.kind, a.platform, a.baseCurrency, a.openedOn, a.notes, id]),
+
         listInstruments: async () => (await rows('SELECT * FROM instruments ORDER BY symbol')).map(toInstrument),
+        getInstrument: async id => toInstrument((await rows('SELECT * FROM instruments WHERE id = ?', [id]))[0]) ?? null,
+        // Throws { code: 'ER_DUP_ENTRY' } for an ISIN that's already there
+        async createInstrument(i) {
+            const [result] = await db.query(
+                'INSERT INTO instruments (symbol, name, isin, kind, currency, distributing, asset_class) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [i.symbol, i.name, i.isin, i.kind, i.currency, i.distributing, i.assetClass]);
+            return result.insertId;
+        },
+        updateInstrument: (id, i) => db.query(
+            `UPDATE instruments SET symbol = ?, name = ?, isin = ?, kind = ?, currency = ?, distributing = ?, asset_class = ?
+             WHERE id = ?`,
+            [i.symbol, i.name, i.isin, i.kind, i.currency, i.distributing, i.assetClass, id]),
 
         // Oldest first. Filters: { accountId, instrumentId }
         async listTransactions({ accountId, instrumentId } = {}) {
@@ -37,6 +60,26 @@ export function createDataStore(db) {
             const sql = `SELECT * FROM transactions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY trade_date, id`;
             return (await rows(sql, params)).map(toTransaction);
         },
+
+        getTransaction: async id => {
+            const row = (await rows('SELECT * FROM transactions WHERE id = ?', [id]))[0];
+            return row ? toTransaction(row) : null;
+        },
+        async createTransaction(t) {
+            const [result] = await db.query(
+                `INSERT INTO transactions (account_id, instrument_id, type, trade_date, units, price, amount,
+                                           currency, fee, fee_currency, fx_to_eur, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [t.accountId, t.instrumentId, t.type, t.date, t.units, t.price, t.amount, t.currency, t.fee, t.feeCurrency, t.fxToEur, t.notes]);
+            return Number(result.insertId);
+        },
+        // Keeps import_ref, so importing the statement again doesn't add the row back
+        updateTransaction: (id, t) => db.query(
+            `UPDATE transactions SET account_id = ?, instrument_id = ?, type = ?, trade_date = ?, units = ?, price = ?,
+                    amount = ?, currency = ?, fee = ?, fee_currency = ?, fx_to_eur = ?, notes = ?
+             WHERE id = ?`,
+            [t.accountId, t.instrumentId, t.type, t.date, t.units, t.price, t.amount, t.currency, t.fee, t.feeCurrency, t.fxToEur, t.notes, id]),
+        deleteTransaction: id => db.query('DELETE FROM transactions WHERE id = ?', [id]),
 
         // Writes an import plan (server/import/index.js) in one transaction: the
         // account if it's new, the new instruments, then the transactions.
