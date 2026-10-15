@@ -1,14 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
-import { renderPages } from '../server/pages.js';
+import { codePage, loginPage, setupPage } from '../server/auth/views.js';
+import { createRenderer, messagePage, renderPages } from '../server/pages.js';
 
 // Accessibility checks on every page as the server sends it (WCAG 2.2 AA
 // basics), and on the colours in style.css. Run axe-core in a real browser
 // as well before calling new UI done.
 
-const { pages, notFound } = renderPages();
-const all = { ...pages, '(404)': notFound };
+const render = createRenderer();
+const session = { stage: 'full', csrf: 'token' };
+const { pages, notFound } = renderPages(render, session);
+const all = {
+    ...pages,
+    '(404)': notFound,
+    '(message)': messagePage(render, { title: 'Something went wrong', text: 'Try again.', session }),
+    '/login': loginPage(render),
+    '/login (error)': loginPage(render, { error: 'Wrong username or password.', username: 'me' }),
+    '/login/code': codePage(render, { csrf: 'token', error: 'That code didn\'t work.' }),
+    '/login/setup': await setupPage(render, { csrf: 'token', secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Invest:me?secret=JBSWY3DPEHPK3PXP' }),
+};
 
 const main = html => html.match(/<main[^>]*>([\s\S]*)<\/main>/)[1];
 const attr = (tag, name) => tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];

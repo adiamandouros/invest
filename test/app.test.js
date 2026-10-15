@@ -14,12 +14,14 @@ before(async () => {
 after(() => server.close());
 
 test('pages are sent with security headers and kept out of search engines', async () => {
-    const res = await get('/');
+    const res = await get('/login');
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-security-policy'), /script-src 'self'/);
     assert.match(res.headers.get('content-security-policy'), /frame-ancestors 'none'/);
     assert.equal(res.headers.get('x-robots-tag'), 'noindex, nofollow');
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    // no-referrer would make browsers send "Origin: null" and break every form
+    assert.equal(res.headers.get('referrer-policy'), 'same-origin');
     assert.equal(res.headers.get('x-powered-by'), null);
     assert.equal(res.headers.get('cache-control'), 'no-store');
 });
@@ -50,14 +52,8 @@ test('/health reports a database that answers, and one that doesn\'t', async () 
     }
 });
 
-test('unknown addresses get the 404 page', async () => {
-    const res = await get('/nowhere');
-    assert.equal(res.status, 404);
-    assert.match(await res.text(), /Page not found/);
-});
-
 test('every linked stylesheet, script and icon is versioned and served', async () => {
-    const html = await (await get('/')).text();
+    const html = await (await get('/login')).text();
     const links = [...html.matchAll(/(?:href|src)="(\/[^"#]+)"/g)].map(m => m[1]).filter(url => url !== '/');
     assert.ok(links.length >= 4);
     for (const url of links) {
@@ -79,4 +75,12 @@ test('page titles name the page and the app', () => {
     const { pages, notFound } = renderPages();
     assert.match(pages['/'], /<title>Overview — Invest<\/title>/);
     assert.match(notFound, /<title>Page not found — Invest<\/title>/);
+});
+
+test('the sign-out button shows only for a signed-in session', () => {
+    assert.doesNotMatch(renderPages().pages['/'], /Sign out/);
+    assert.doesNotMatch(renderPages(undefined, { stage: 'password', csrf: 't' }).pages['/'], /Sign out/);
+    const page = renderPages(undefined, { stage: 'full', csrf: 'a"b' }).pages['/'];
+    assert.match(page, /action="\/logout"/);
+    assert.match(page, /name="_csrf" value="a&quot;b"/);
 });

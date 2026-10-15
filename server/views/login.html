@@ -1,0 +1,15 @@
+<div class="auth-card">
+    <h1 class="fs-3 mb-3">Sign in</h1>
+    {{error}}
+    <form method="post" action="/login">
+        <div class="mb-3">
+            <label for="username" class="form-label">Username</label>
+            <input id="username" name="username" class="form-control" value="{{username}}" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required autofocus>
+        </div>
+        <div class="mb-4">
+            <label for="password" class="form-label">Password</label>
+            <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Continue</button>
+    </form>
+</div>

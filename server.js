@@ -24,8 +24,9 @@ async function migrateOnStart() {
 // require() it would fail with ERR_REQUIRE_ASYNC_MODULE (see start.cjs).
 const db = config.db ? createDb(config.db) : null;
 if (!db) console.warn(`[db] Not configured: set ${config.missingDbVars.join(', ')} (see .env.example)`);
+if (!config.encryptionKey) console.warn('[auth] Sign-in is off: set ENCRYPTION_KEY, at least 32 characters (see .env.example)');
 
-createApp({ db }).listen(config.port, () => {
+createApp({ db, encryptionKey: config.encryptionKey }).listen(config.port, () => {
     console.log(`Invest running at http://localhost:${config.port}`);
     if (config.db) migrateOnStart();
 });

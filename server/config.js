@@ -18,5 +18,7 @@ export function loadConfig(env = process.env) {
             password: env.DB_PASSWORD,
         },
         missingDbVars: missing,
+        // Encrypts the stored authenticator secret; sign-in is off without it
+        encryptionKey: (env.ENCRYPTION_KEY ?? '').length >= 32 ? env.ENCRYPTION_KEY : null,
     };
 }

@@ -1,0 +1,23 @@
+<div class="auth-card">
+    <h1 class="fs-3 mb-3">Set up your authenticator app</h1>
+    <p>Every sign-in will also ask for a code from an authenticator app on your phone, such as Aegis, 2FAS or Google Authenticator.</p>
+    <ol>
+        <li>In the app, add an account and scan this QR code.</li>
+        <li>Or, if you can't scan it, type in this key:<br><code class="totp-key">{{secret}}</code></li>
+        <li>Enter the 6-digit code the app shows.</li>
+    </ol>
+    <div class="qr-code mb-4">{{qr}}</div>
+    {{error}}
+    <form method="post" action="/login/setup">
+        <input type="hidden" name="_csrf" value="{{csrf}}">
+        <div class="mb-4">
+            <label for="code" class="form-label">Code</label>
+            <input id="code" name="code" class="form-control code-input" inputmode="numeric" pattern="[0-9 ]*" maxlength="7" autocomplete="one-time-code" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Finish setup</button>
+    </form>
+    <form method="post" action="/logout" class="mt-3 text-center">
+        <input type="hidden" name="_csrf" value="{{csrf}}">
+        <button type="submit" class="btn btn-link">Start over</button>
+    </form>
+</div>
