@@ -10,12 +10,12 @@ import { createMemoryStore } from './memory-store.js';
 export const KEY = 'test-key-'.repeat(4);
 export const PASSWORD = 'a long test password';
 
-export async function start({ encryptionKey = KEY, data = createMemoryData() } = {}) {
+export async function start({ encryptionKey = KEY, data = createMemoryData(), market = null } = {}) {
     const clock = { now: 1_700_000_000_000 };
     const now = () => clock.now;
     const store = createMemoryStore({ now });
     await store.createUser('me', await hashPassword(PASSWORD));
-    const app = createApp({ store, data, encryptionKey, now });
+    const app = createApp({ store, data, market, encryptionKey, now });
     const server = await new Promise(resolve => { const s = app.listen(0, () => resolve(s)); });
     const base = `http://localhost:${server.address().port}`;
     return { clock, store, data, base, browser: () => browser(base), close: () => server.close() };

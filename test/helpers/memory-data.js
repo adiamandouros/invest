@@ -4,12 +4,27 @@ export function createMemoryData() {
     const accounts = [];
     const instruments = [];
     const transactions = [];
+    const prices = [];
+    const fxRates = [];
+    const status = {};
+    const lastBy = (list, key) => {
+        const last = {};
+        for (const r of list) if (!last[r[key]] || r.date > last[r[key]]) last[r[key]] = r.date;
+        return last;
+    };
+    const upsert = (list, row, same) => {
+        const i = list.findIndex(same);
+        if (i === -1) list.push(row); else list[i] = row;
+    };
     const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id);
 
     return {
         accounts,
         instruments,
         transactions,
+        prices,
+        fxRates,
+        status,
 
         listAccounts: async () => [...accounts].sort((a, b) => a.name.localeCompare(b.name)),
         findAccount: async (platform, externalRef) =>
@@ -30,6 +45,19 @@ export function createMemoryData() {
             instruments.push({ id, ...i });
             return id;
         },
+        async setPriceSymbol(id, priceSymbol, priceSource) { Object.assign(instruments.find(x => x.id === id), { priceSymbol, priceSource }); },
+
+        listPrices: async () => [...prices].sort((a, b) => a.instrumentId - b.instrumentId || (a.date < b.date ? -1 : 1)),
+        lastPriceDates: async () => lastBy(prices, 'instrumentId'),
+        async savePrices(list) { for (const p of list) upsert(prices, { ...p }, x => x.instrumentId === p.instrumentId && x.date === p.date); },
+        listFxRates: async () => [...fxRates].sort((a, b) => a.currency.localeCompare(b.currency) || (a.date < b.date ? -1 : 1)),
+        lastFxDates: async () => lastBy(fxRates, 'currency'),
+        async saveFxRates(list) { for (const r of list) upsert(fxRates, { ...r }, x => x.currency === r.currency && x.date === r.date); },
+        marketStatus: async () => structuredClone(status),
+        async setMarketStatus(name, ok, message) {
+            status[name] = { checkedAt: new Date().toISOString().slice(0, 19).replace('T', ' '), ok, message: message ?? null };
+        },
+
         async updateInstrument(id, i) {
             if (i.isin && instruments.some(x => x.isin === i.isin && x.id !== id)) throw Object.assign(new Error('Duplicate isin'), { code: 'ER_DUP_ENTRY' });
             Object.assign(instruments.find(x => x.id === id), i);
@@ -60,7 +88,7 @@ export function createMemoryData() {
             const ids = { ...instrumentIds };
             for (const i of added) {
                 const id = instruments.length + 1;
-                instruments.push({ id, isin: i.isin, symbol: i.symbol, name: i.name, kind: i.kind, currency: i.currency ?? 'EUR', distributing: null, assetClass: null });
+                instruments.push({ id, isin: i.isin, symbol: i.symbol, name: i.name, kind: i.kind, currency: i.currency ?? 'EUR', distributing: null, assetClass: null, priceSymbol: null, priceSource: null });
                 ids[i.key] = id;
             }
             for (const t of rows) {

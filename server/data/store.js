@@ -10,6 +10,7 @@ const toAccount = row => row && {
 const toInstrument = row => row && {
     id: row.id, isin: row.isin, symbol: row.symbol, name: row.name, kind: row.kind, currency: row.currency,
     distributing: row.distributing === null ? null : Boolean(row.distributing), assetClass: row.asset_class,
+    priceSymbol: row.price_symbol, priceSource: row.price_source,
 };
 
 const toTransaction = row => ({
@@ -42,14 +43,48 @@ export function createDataStore(db) {
         // Throws { code: 'ER_DUP_ENTRY' } for an ISIN that's already there
         async createInstrument(i) {
             const [result] = await db.query(
-                'INSERT INTO instruments (symbol, name, isin, kind, currency, distributing, asset_class) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [i.symbol, i.name, i.isin, i.kind, i.currency, i.distributing, i.assetClass]);
+                `INSERT INTO instruments (symbol, name, isin, kind, currency, distributing, asset_class, price_symbol, price_source)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [i.symbol, i.name, i.isin, i.kind, i.currency, i.distributing, i.assetClass, i.priceSymbol ?? null, i.priceSource ?? null]);
             return result.insertId;
         },
         updateInstrument: (id, i) => db.query(
-            `UPDATE instruments SET symbol = ?, name = ?, isin = ?, kind = ?, currency = ?, distributing = ?, asset_class = ?
+            `UPDATE instruments SET symbol = ?, name = ?, isin = ?, kind = ?, currency = ?, distributing = ?, asset_class = ?,
+                    price_symbol = ?, price_source = ?
              WHERE id = ?`,
-            [i.symbol, i.name, i.isin, i.kind, i.currency, i.distributing, i.assetClass, id]),
+            [i.symbol, i.name, i.isin, i.kind, i.currency, i.distributing, i.assetClass, i.priceSymbol ?? null, i.priceSource ?? null, id]),
+        setPriceSymbol: (id, symbol, source) => db.query('UPDATE instruments SET price_symbol = ?, price_source = ? WHERE id = ?', [symbol, source, id]),
+
+        // ── Prices and exchange rates (server/market/) ──
+
+        listPrices: async () => (await rows('SELECT instrument_id, price_date, close, currency, source FROM prices ORDER BY instrument_id, price_date'))
+            .map(r => ({ instrumentId: r.instrument_id, date: r.price_date, close: r.close, currency: r.currency, source: r.source })),
+        // { instrumentId: 'YYYY-MM-DD' } for each instrument with prices
+        lastPriceDates: async () => Object.fromEntries((await rows('SELECT instrument_id, MAX(price_date) AS last FROM prices GROUP BY instrument_id'))
+            .map(r => [r.instrument_id, r.last])),
+        async savePrices(list) {
+            if (!list.length) return;
+            await db.query(
+                `INSERT INTO prices (instrument_id, price_date, close, currency, source) VALUES ?
+                 ON DUPLICATE KEY UPDATE close = VALUES(close), currency = VALUES(currency), source = VALUES(source)`,
+                [list.map(p => [p.instrumentId, p.date, p.close, p.currency, p.source])]);
+        },
+        listFxRates: async () => (await rows('SELECT currency, rate_date, per_eur FROM fx_rates ORDER BY currency, rate_date'))
+            .map(r => ({ currency: r.currency, date: r.rate_date, perEur: r.per_eur })),
+        lastFxDates: async () => Object.fromEntries((await rows('SELECT currency, MAX(rate_date) AS last FROM fx_rates GROUP BY currency'))
+            .map(r => [r.currency, r.last])),
+        async saveFxRates(list) {
+            if (!list.length) return;
+            await db.query('INSERT INTO fx_rates (currency, rate_date, per_eur) VALUES ? ON DUPLICATE KEY UPDATE per_eur = VALUES(per_eur)',
+                [list.map(r => [r.currency, r.date, r.perEur])]);
+        },
+        // { prices: { checkedAt: Date-string (UTC), ok, message }, fx: {...} }
+        marketStatus: async () => Object.fromEntries((await rows('SELECT name, checked_at, ok, message FROM market_updates'))
+            .map(r => [r.name, { checkedAt: r.checked_at, ok: Boolean(r.ok), message: r.message }])),
+        setMarketStatus: (name, ok, message) => db.query(
+            `INSERT INTO market_updates (name, checked_at, ok, message) VALUES (?, UTC_TIMESTAMP(), ?, ?)
+             ON DUPLICATE KEY UPDATE checked_at = UTC_TIMESTAMP(), ok = VALUES(ok), message = VALUES(message)`,
+            [name, ok, message?.slice(0, 1000) ?? null]),
 
         // Oldest first. Filters: { accountId, instrumentId }
         async listTransactions({ accountId, instrumentId } = {}) {

@@ -136,3 +136,46 @@ test('adding, editing and deleting a transaction, with errors shown on the form'
         app.close();
     }
 });
+
+test('holdings show value, gain and return, and "Update now" runs an update', async () => {
+    let runs = 0;
+    const market = {
+        running: false,
+        refreshIfStale: async () => false,
+        run: async () => {
+            runs++;
+            const id = symbol => app.data.instruments.find(i => i.symbol === symbol).id;
+            await app.data.savePrices([
+                { instrumentId: id('VUAA.EU'), date: '2023-11-14', close: '149.5', currency: 'USD', source: 'yahoo' },
+                { instrumentId: id('VTI.US'), date: '2023-11-14', close: '377', currency: 'USD', source: 'yahoo' },
+            ]);
+        },
+    };
+    const app = await start({ market });
+    try {
+        const b = app.browser();
+        await signUp(b, app.clock);
+        const form = await (await b.get('/import')).text();
+        const preview = await (await b.post('/import/preview', upload(csrfOf(form)))).text();
+        await b.post('/import/confirm', { _csrf: csrfOf(preview), id: preview.match(/name="id" value="([^"]+)"/)[1] });
+        await app.data.saveFxRates([{ currency: 'USD', date: '2022-01-03', perEur: '1.13' }]);
+
+        let html = await (await b.get('/holdings')).text();
+        assert.match(html, /No prices yet/);
+        assert.match(html, /No price yet for .*VUAA\.EU.*, so the totals can't be worked out/);
+        assert.match(html, /No price yet for .*VTI\.US.*, so the totals can't be worked out/);
+        assert.match(html, /Return a year<\/dt><dd>—/, 'unknown, not a guess');
+
+        assert.equal(location(await b.post('/prices/update', { _csrf: csrfOf(html) })), '/holdings');
+        assert.equal(runs, 1);
+        html = await (await b.get('/holdings')).text();
+        assert.match(html, /Prices as of 2023-11-14 from Yahoo Finance/);
+        // 6 × 149.5 USD at 1.13 = 793.81 EUR
+        assert.match(html, /€793\.81/);
+        assert.match(html, /Value now/);
+        assert.match(html, /Return a year<\/dt><dd>[+−]\d+\.\d%/);
+        assert.equal((await b.post('/prices/update', {})).status, 403, 'needs the token');
+    } finally {
+        app.close();
+    }
+});
