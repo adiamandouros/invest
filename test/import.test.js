@@ -102,8 +102,8 @@ test('unknown rows are reported, and wrong files are refused', () => {
     const report = JSON.parse(REPORT);
     report.cash_in_outs.push({ id: 999, currency: 'USD', type: 'mystery', datetime: '2025-01-01', amount: '1', offbalance: null });
     assert.match(parseStatement(JSON.stringify(report)).warnings[0], /Cash row 999: unknown type "mystery"/);
-    assert.throws(() => parseStatement('not json'), /isn't valid JSON/);
-    assert.throws(() => parseStatement('{"hello": 1}'), /Only Freedom24/);
+    assert.throws(() => parseStatement('not json'), /isn't a statement the app can read/);
+    assert.throws(() => parseStatement('{"hello": 1}'), /Freedom24 broker report \(JSON\) or a Mintos account statement \(CSV\)/);
 });
 
 test('multipart forms are read into fields and files', () => {

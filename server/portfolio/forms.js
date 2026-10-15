@@ -149,3 +149,25 @@ export function parseAccount(body) {
     const notes = text(body.notes).slice(0, 500) || null;
     return { errors, values: { name, kind, platform, baseCurrency, openedOn, notes } };
 }
+
+// A P2P balance entered by hand: { accountId, date, value, cash, notes }
+export function parseBalance(body, accountId) {
+    const errors = {};
+    const date = text(body.date);
+    if (!isDate(date)) errors.date = 'Enter a date, like 2026-10-15.';
+    const read = (name, required) => {
+        try {
+            const value = number(body[name]);
+            if (value === null && required) errors[name] = 'Enter a number.';
+            else if (value !== null && value < 0n) errors[name] = 'Enter a positive number.';
+            return value === null ? null : plain(value);
+        } catch {
+            errors[name] = 'Enter a number, like 612.40';
+            return null;
+        }
+    };
+    const value = read('value', true);
+    const cash = read('cash', false);
+    const notes = text(body.notes).slice(0, 500) || null;
+    return { errors, values: { accountId, date, value, cash, notes } };
+}

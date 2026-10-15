@@ -1,4 +1,4 @@
-// The SQL for accounts, instruments and transactions, on a mysql2 pool.
+// The SQL for accounts, instruments, transactions and P2P balances, on a mysql2 pool.
 // test/helpers/memory-data.js mirrors this interface for the tests, so change
 // both together. Decimals come back as strings, dates as 'YYYY-MM-DD'.
 
@@ -19,13 +19,20 @@ const toTransaction = row => ({
     feeCurrency: row.fee_currency, fxToEur: row.fx_to_eur, importRef: row.import_ref, notes: row.notes,
 });
 
+const toBalance = row => ({
+    accountId: row.account_id, date: row.balance_date, value: row.value, cash: row.cash, source: row.source, notes: row.notes,
+});
+
 export function createDataStore(db) {
     const rows = async (sql, params) => (await db.query(sql, params))[0];
 
     return {
         listAccounts: async () => (await rows('SELECT * FROM accounts ORDER BY name')).map(toAccount),
-        findAccount: async (platform, externalRef) =>
-            toAccount((await rows('SELECT * FROM accounts WHERE platform = ? AND external_ref = ?', [platform, externalRef]))[0]) ?? null,
+        // With externalRef null (statements that don't name the account): the
+        // platform's first account
+        findAccount: async (platform, externalRef) => toAccount((externalRef === null
+            ? await rows('SELECT * FROM accounts WHERE platform = ? ORDER BY id LIMIT 1', [platform])
+            : await rows('SELECT * FROM accounts WHERE platform = ? AND external_ref = ?', [platform, externalRef]))[0]) ?? null,
 
         getAccount: async id => toAccount((await rows('SELECT * FROM accounts WHERE id = ?', [id]))[0]) ?? null,
         async createAccount(a) {
@@ -116,10 +123,25 @@ export function createDataStore(db) {
             [t.accountId, t.instrumentId, t.type, t.date, t.units, t.price, t.amount, t.currency, t.fee, t.feeCurrency, t.fxToEur, t.notes, id]),
         deleteTransaction: id => db.query('DELETE FROM transactions WHERE id = ?', [id]),
 
+        // ── P2P balances ──
+
+        // Oldest first. Filter: { accountId }
+        async listBalances({ accountId } = {}) {
+            const sql = `SELECT * FROM p2p_balances ${accountId ? 'WHERE account_id = ?' : ''} ORDER BY account_id, balance_date`;
+            return (await rows(sql, accountId ? [accountId] : [])).map(toBalance);
+        },
+        // Entered by hand: replaces the day's value and notes, and its cash if given
+        saveBalance: b => db.query(
+            `INSERT INTO p2p_balances (account_id, balance_date, value, cash, source, notes) VALUES (?, ?, ?, ?, 'manual', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value), cash = COALESCE(VALUES(cash), cash), source = 'manual', notes = VALUES(notes)`,
+            [b.accountId, b.date, b.value, b.cash, b.notes]),
+        deleteBalance: (accountId, date) => db.query('DELETE FROM p2p_balances WHERE account_id = ? AND balance_date = ?', [accountId, date]),
+
         // Writes an import plan (server/import/index.js) in one transaction: the
-        // account if it's new, the new instruments, then the transactions.
-        // Returns { accountId, added }.
-        async importStatement({ account, instrumentIds, instruments, transactions }) {
+        // account if it's new, the new instruments, the transactions, changed
+        // amounts for rows imported before ({ id, amount, date, notes }), and
+        // the statement's cash balances ({ date, cash }). Returns { accountId, added }.
+        async importStatement({ account, instrumentIds, instruments, transactions, updates = [], balances = [] }) {
             const conn = await db.getConnection();
             try {
                 await conn.beginTransaction();
@@ -147,6 +169,16 @@ export function createDataStore(db) {
                             accountId, t.instrumentKey ? ids[t.instrumentKey] : null, t.type, t.date, t.units, t.price, t.amount,
                             t.currency, t.fee ?? '0', t.feeCurrency, t.fxToEur, t.ref, t.notes,
                         ])]);
+                }
+                for (const u of updates) {
+                    await conn.query('UPDATE transactions SET amount = ?, trade_date = ?, notes = ? WHERE id = ? AND account_id = ?',
+                        [u.amount, u.date, u.notes, u.id, accountId]);
+                }
+                if (balances.length) {
+                    await conn.query(
+                        `INSERT INTO p2p_balances (account_id, balance_date, cash, source) VALUES ?
+                         ON DUPLICATE KEY UPDATE cash = VALUES(cash)`,
+                        [balances.map(b => [accountId, b.date, b.cash, 'import'])]);
                 }
                 await conn.commit();
                 return { accountId, added: transactions.length };

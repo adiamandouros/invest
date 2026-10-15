@@ -1,26 +1,31 @@
 import { dec, fixed, plain } from '../lib/decimal.js';
 import { cash, positions } from '../lib/holdings.js';
 import { isFreedom24, parseFreedom24 } from './freedom24.js';
+import { isMintos, parseMintos } from './mintos.js';
 
-// Importing a broker statement in two steps: planImport works out what's new
+// Importing a statement in two steps: planImport works out what's new
 // and checks the result against the statement's closing balances, without
 // writing anything; applyImport writes that plan in one database transaction.
 // `data` is server/data/store.js.
 
+const UNKNOWN = 'This file isn\'t a statement the app can read yet: a Freedom24 broker report (JSON) or a Mintos account statement (CSV).';
+
 export function parseStatement(text) {
+    if (isMintos(text)) return parseMintos(text);
     let report;
     try {
         report = JSON.parse(text);
     } catch {
-        throw new Error('The file isn\'t valid JSON. Export the report from Freedom24 as JSON.');
+        throw new Error(UNKNOWN);
     }
     if (isFreedom24(report)) return parseFreedom24(report);
-    throw new Error('This file isn\'t a statement the app can read yet. Only Freedom24 broker reports (JSON) are supported.');
+    throw new Error(UNKNOWN);
 }
 
 const keyOf = instrument => instrument.isin ?? instrument.symbol;
 
 export async function planImport(statement, data) {
+    if (statement.kind === 'p2p') return planP2pImport(statement, data);
     const account = await data.findAccount(statement.platform, statement.accountRef);
     const known = await data.listInstruments();
     const existing = account ? await data.listTransactions({ accountId: account.id }) : [];
@@ -106,9 +111,80 @@ export async function planImport(statement, data) {
     };
 }
 
+// A P2P statement's monthly sums (server/import/mintos.js) are added, or
+// replace what an earlier import gave for that month when this statement has
+// the whole month; a month only partly in the statement doesn't replace one
+// already imported. Checked against the statement's own cash balance.
+const lastDay = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+const monthName = month => new Date(`${month}-01T00:00:00Z`).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+async function planP2pImport(statement, data) {
+    const account = await data.findAccount(statement.platform, statement.accountRef);
+    const existing = account ? await data.listTransactions({ accountId: account.id }) : [];
+    const byRef = new Map(existing.filter(t => t.importRef).map(t => [t.importRef, t]));
+    const { start, end } = statement.period;
+    const whole = month => start <= `${month}-01` && end >= lastDay(month);
+
+    const transactions = [];
+    const updates = [];
+    const kept = new Set();
+    let duplicates = 0;
+    for (const t of statement.transactions) {
+        const old = byRef.get(t.ref);
+        if (!old) transactions.push(t);
+        else if (dec(old.amount) === dec(t.amount)) duplicates++;
+        else if (t.month && whole(t.month)) updates.push({ id: old.id, amount: t.amount, date: t.date, notes: t.notes, type: t.type });
+        else {
+            duplicates++;
+            if (t.month) kept.add(t.month);
+        }
+    }
+    const warnings = [...statement.warnings, ...[...kept].sort().map(m =>
+        `${monthName(m)} is only partly in this statement and was imported before with other amounts, so the app keeps those. To update it, export a statement that starts on the 1st of the month.`)];
+
+    // The statement's rows add up to its closing cash
+    const check = Object.entries(statement.check).map(([currency, c]) => {
+        const computed = c.opening + c.turnover;
+        return { label: `Cash ${currency} on ${end}`, expected: fixed(c.closing), computed: fixed(computed), ok: fixed(c.closing) === fixed(computed) };
+    });
+    // The ledger is the account's value: with this import it can't be less than the cash
+    const changed = new Map(updates.map(u => [u.id, u.amount]));
+    const after = [...existing.map(t => ({ ...t, amount: changed.get(t.id) ?? t.amount })), ...transactions]
+        .filter(t => t.date <= end).map(t => ({ ...t, account: 'a' }));
+    const balances = cash(after);
+    for (const [currency, c] of Object.entries(statement.check)) {
+        const value = balances.get(`a|${currency}`) ?? 0n;
+        check.push({
+            label: `Money in loans (${currency}, value minus cash)`, expected: 'not negative', computed: fixed(value - c.closing),
+            ok: value - c.closing >= 0n,
+        });
+    }
+
+    const counts = {};
+    for (const t of transactions) counts[t.type] = (counts[t.type] ?? 0) + 1;
+    return {
+        kind: 'p2p',
+        account: account ?? { id: null, name: statement.accountName, platform: statement.platform, externalRef: statement.accountRef },
+        accountFields: { name: statement.accountName, kind: 'p2p', platform: statement.platform, externalRef: statement.accountRef, baseCurrency: statement.baseCurrency, openedOn: start },
+        period: statement.period,
+        instrumentIds: {},
+        newInstruments: [],
+        transactions,
+        updates,
+        balances: statement.balances.map(b => ({ date: b.date, cash: b.cash })),
+        counts,
+        duplicates,
+        warnings,
+        check,
+        checkOk: check.every(c => c.ok),
+    };
+}
+
 export const applyImport = (plan, data) => data.importStatement({
     account: plan.account.id ? { id: plan.account.id } : plan.accountFields,
     instrumentIds: plan.instrumentIds,
     instruments: plan.newInstruments,
     transactions: plan.transactions,
+    updates: plan.updates ?? [],
+    balances: plan.balances ?? [],
 });
