@@ -30,11 +30,13 @@ Money is stored as `DECIMAL` and read back as strings, so no amount is rounded t
 First-time setup:
 
 1. **MySQL Databases:** create the database and a user, and give the user *All privileges* on it. cPanel prefixes both names with `sonovabi_`.
-2. **Git Version Control → Create:** clone this repository into `~/invest.sonovabitc.win` (the subdomain's folder; it must be empty).
-3. **Setup Node.js App → Create:** Node.js 20, mode *Production*, application root `invest.sonovabitc.win`, URL `invest.sonovabitc.win`, startup file `start.cjs` (not `server.js`: LiteSpeed loads the startup file with `require()`, which Node 20 before 20.19 can't do for an ES module). Add the environment variables `DB_NAME`, `DB_USER` and `DB_PASSWORD` (`DB_HOST` defaults to `localhost`). Then click *Run NPM Install* and *Restart*.
+2. **Git Version Control → Create:** clone this repository into `~/repositories/invest`.
+3. **Setup Node.js App → Create:** Node.js 20, application root `repositories/invest`, URL `invest.sonovabitc.win`, startup file `start.cjs`. Set `DB_NAME`, `DB_USER` and `DB_PASSWORD` (`DB_HOST` defaults to `localhost`), either as the app's environment variables or in a `.env` file in `~/repositories/invest`. Then click *Run NPM Install* and *Restart*.
 4. **SSL/TLS Status:** make sure AutoSSL covers `invest.sonovabitc.win`.
 5. Open https://invest.sonovabitc.win/health. It should show `{"status":"ok","db":"ok"}`.
 
 Each later deploy: *Git Version Control → Manage → Pull or Deploy*: *Update from Remote*, then *Deploy HEAD Commit*. This runs `.cpanel.yml`, which installs packages and restarts the app (see `scripts/cpanel-deploy.sh`). Never run `npm install` in the app folder on the server, because `node_modules` there is a link the Node.js selector manages.
+
+If every request hangs, LiteSpeed is probably still sending requests to an old app process that never started, and *Restart* doesn't replace it. In cPanel → Terminal, `ps -u sonovabi -o pid,etime,args | grep -i [n]ode` lists the app processes. A working one is named `lsnode:/home/sonovabi/repositories/invest/`. A stuck one shows as `node …/lsnode.js`, and `readlink /proc/<pid>/cwd` points into `~/nodevenv/repositories/invest/`. Stop it with `kill <pid>`; the next request starts a fresh process.
 
 LiteSpeed serves `public/` itself with a 7-day cache, so stylesheets and scripts are linked with a `?v=<hash>` that changes on every deploy.
