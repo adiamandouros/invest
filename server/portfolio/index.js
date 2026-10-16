@@ -3,6 +3,7 @@ import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
 import { allocation } from '../lib/allocation.js';
 import { backup, transactionsCsv } from '../lib/export.js';
+import { DEFAULT_DIVIDEND_RATE, DEFAULT_RATE, taxYear } from '../lib/tax.js';
 import { fixed } from '../lib/decimal.js';
 import { summariseP2p } from '../lib/p2p.js';
 import { project, spreadOf } from '../lib/projection.js';
@@ -18,6 +19,7 @@ import { number, parseAccount, parseAllocation, parseBalance, parseInstrument, p
 import { balanceForm, p2pAccountContent, p2pListContent } from './p2p-views.js';
 import { dashboardContent, dashboardNotices } from './dashboard-views.js';
 import { exportContent } from './export-views.js';
+import { taxContent, taxCsv } from './tax-views.js';
 import { projectionContent } from './projection-views.js';
 import { CHART_SCRIPTS, reportsContent, yearContent, yearCsv, yearsCsv } from './reports-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
@@ -267,6 +269,47 @@ export function createPortfolio({ data, market = null, render, send, message, no
         });
         page(req, res, 'Projection', projectionContent({ history, values, errors, projection, split, thisYear }),
             Object.keys(errors).length ? 400 : 200, projection ? CHART_SCRIPTS : []);
+    });
+
+    // ── Tax summary ─────────────────────────────────────────────────────────
+
+    // /tax: the last whole year (or this one, in the first year)
+    router.get('/tax', async (req, res) => {
+        const first = (await data.listTransactions())[0]?.date;
+        const year = Number(today().slice(0, 4));
+        res.redirect(303, `/tax/${first && Number(first.slice(0, 4)) < year ? year - 1 : year}`);
+    });
+
+    // /tax/2025 and /tax/2025.csv, with ?rate=15 for the tax on interest in percent
+    router.get('/tax/:file', async (req, res, next) => {
+        const match = req.params.file.match(/^(\d{4})(\.csv)?$/);
+        if (!match) return next();
+        const year = Number(match[1]);
+        const [{ accounts, instruments, transactions }, rates] = await Promise.all([loadAll(), data.listFxRates()]);
+        const firstYear = transactions[0] ? Number(transactions[0].date.slice(0, 4)) : null;
+        const thisYear = Number(today().slice(0, 4));
+        if (firstYear === null || year < firstYear || year > thisYear) return next();
+
+        // Percentages from the form, as decimals: 15 → 0.15
+        const errors = {};
+        const percentage = (name, fallback, standard) => {
+            const text = String(req.query[name] ?? fallback).trim();
+            try {
+                const pct = number(text);
+                if (pct === null || pct < 0n || pct > 100n * 10n ** 8n) throw new Error();
+                return { text, rate: pct / 100n };
+            } catch {
+                errors[name] = 'Enter a percentage from 0 to 100, like 15.';
+                return { text, rate: standard };
+            }
+        };
+        const { text: rateText, rate } = percentage('rate', '15', DEFAULT_RATE);
+        const { text: dividendRateText, rate: dividendRate } = percentage('dividendRate', '5', DEFAULT_DIVIDEND_RATE);
+        const t = taxYear({ transactions, accounts, instruments, eurPer: createRates(rates), year, rate, dividendRate });
+        if (match[2]) return download(res, `invest-tax-${year}.csv`, taxCsv(t));
+        const years = Array.from({ length: thisYear - firstYear + 1 }, (_, i) => thisYear - i);
+        const failed = Object.keys(errors).length > 0;
+        page(req, res, `Tax summary ${year}`, taxContent({ t, years, rateText, dividendRateText, errors }), failed ? 400 : 200);
     });
 
     // ── Export ──────────────────────────────────────────────────────────────

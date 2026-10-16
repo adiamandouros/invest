@@ -61,14 +61,17 @@ export const view = name => readFileSync(join(VIEWS_DIR, `${name}.html`), 'utf8'
 
 // The signed-in part of the header: page links and the sign-out button
 const NAV = [
-    ['/', 'Overview'], ['/holdings', 'Holdings'], ['/p2p', 'P2P'], ['/allocation', 'Allocation'], ['/reports', 'Reports'], ['/projection', 'Projection'], ['/transactions', 'Transactions'],
+    ['/', 'Overview'], ['/holdings', 'Holdings'], ['/p2p', 'P2P'], ['/allocation', 'Allocation'], ['/reports', 'Reports'], ['/projection', 'Projection'], ['/tax', 'Tax'], ['/transactions', 'Transactions'],
     ['/instruments', 'Instruments'], ['/accounts', 'Accounts'], ['/import', 'Import'],
 ];
+
+// A section's link is current on its own pages too, e.g. Reports on /reports/2025
+const current = (href, path) => href === path || (href !== '/' && Boolean(path?.startsWith(`${href}/`)));
 
 function navigation(session, path) {
     if (session?.stage !== 'full') return '';
     const links = NAV.map(([href, label]) =>
-        `<li class="nav-item"><a class="nav-link" href="${href}"${href === path ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
+        `<li class="nav-item"><a class="nav-link" href="${href}"${current(href, path) ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
     return `            <ul class="nav site-pages">${links}</ul>
             <div class="ms-auto d-flex align-items-center column-gap-2">
                 <a class="nav-link" href="/settings"${path === '/settings' ? ' aria-current="page"' : ''}>

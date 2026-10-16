@@ -19,6 +19,8 @@ import { dashboardContent, dashboardNotices } from '../server/portfolio/dashboar
 import { project } from '../server/lib/projection.js';
 import { projectionContent } from '../server/portfolio/projection-views.js';
 import { exportContent } from '../server/portfolio/export-views.js';
+import { taxYear } from '../server/lib/tax.js';
+import { taxContent } from '../server/portfolio/tax-views.js';
 import { allocationContent, allocationForm } from '../server/portfolio/allocation-views.js';
 import { balanceForm, p2pAccountContent, p2pListContent } from '../server/portfolio/p2p-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent } from '../server/portfolio/views.js';
@@ -103,6 +105,15 @@ const all = {
         }),
     })),
     '/ (overview, empty)': page('Overview', dashboardContent({ total: {}, year: null, series: [], income: [], groups: null })),
+    '/tax/2025': page('Tax summary 2025', taxContent({
+        t: taxYear({ transactions: data.transactions, accounts: new Map(data.accounts.map(a => [a.id, a])), instruments: new Map(data.instruments.map(i => [i.id, i])),
+            eurPer: createRates([{ currency: 'USD', date: '2022-01-03', perEur: '1.13' }]), year: 2025, rate: dec('0.15') }),
+        years: [2026, 2025, 2024], rateText: '15',
+    })),
+    '/tax/2019 (empty, bad rate)': page('Tax summary 2019', taxContent({
+        t: taxYear({ transactions: [], accounts: new Map(), instruments: new Map(), eurPer: createRates([]), year: 2019, rate: dec('0.15') }),
+        years: [2019], rateText: 'x', dividendRateText: 'y', errors: { rate: 'Enter a percentage from 0 to 100, like 15.', dividendRate: 'Enter a percentage from 0 to 100, like 15.' },
+    })),
     '/export': page('Export your data', exportContent({ counts: { accounts: 2, transactions: 40, prices: 1 } })),
     '/projection': page('Projection', projectionContent({
         history: reports.groupHistory(), thisYear: 2026, split: 'by your targets: P2P lending 100%',
