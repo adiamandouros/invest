@@ -35,6 +35,11 @@ test('the reports with inflation: each year\'s rise and real return, and the rea
     const t = r.total();
     assert.ok(t.realXirr < t.xirr, `${t.realXirr} < ${t.xirr}`);
     assert.equal(t.inflationUntil, '2025-12');
+    const later = createReports({
+        transactions: data.transactions, accounts: new Map(data.accounts.map(a => [a.id, a])), instruments: new Map(data.instruments.map(i => [i.id, i])),
+        balances: data.balances, groups: data.groups, priceOf: createPrices(data.prices), eurPer: createRates([]), today: '2026-10-15', inflation: createInflation(INDEX),
+    });
+    assert.equal(later.year(2026).inflation, null, 'no month of 2026 published: unknown, not 0%');
     const none = reportsOf(null);
     assert.equal(none.year(2024).inflation, null);
     assert.equal(none.total().realXirr, null);

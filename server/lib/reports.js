@@ -187,7 +187,8 @@ export function createReports({ transactions, accounts, instruments, balances, g
         year: year => {
             const p = period(`${year - 1}-12-31`, yearEnd(year));
             // Prices' rise over the year (so far), and the year's return less it
-            const prices = inflation ? inflation.between(p.from, p.to) : null;
+            // Unknown (null) for a year with no published month yet
+            const prices = inflation && p.from.slice(0, 7) < inflation.lastMonth ? inflation.between(p.from, p.to) : null;
             return { year, ...p, inflation: prices, realReturn: prices === null ? null : inflation.real(p.periodReturn, prices) };
         },
         // The value and the money put in at the end of each month (the last one ends today)

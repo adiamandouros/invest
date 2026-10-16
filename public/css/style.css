@@ -271,3 +271,9 @@ textarea:focus-visible,
     padding: 0.65rem 0;
     cursor: pointer;
 }
+
+/* Notes under a summary figure, like "avg $198.00 a unit": small, like other notes */
+.summary dd .small {
+    font-size: 0.875rem;
+    font-weight: 400;
+}
