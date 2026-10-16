@@ -9,6 +9,7 @@ export function createMemoryData() {
     const status = {};
     const balances = [];
     const groups = [];
+    const settings = {};
     const lastBy = (list, key) => {
         const last = {};
         for (const r of list) if (!last[r[key]] || r.date > last[r[key]]) last[r[key]] = r.date;
@@ -29,6 +30,7 @@ export function createMemoryData() {
         status,
         balances,
         groups,
+        settingsStore: settings,
 
         listAccounts: async () => [...accounts].sort((a, b) => a.name.localeCompare(b.name)),
         findAccount: async (platform, externalRef) => [...accounts].sort((a, b) => a.id - b.id)
@@ -82,6 +84,9 @@ export function createMemoryData() {
         },
         async updateTransaction(id, t) { Object.assign(transactions.find(x => x.id === id), t); },
         async deleteTransaction(id) { transactions.splice(transactions.findIndex(x => x.id === id), 1); },
+
+        settings: async () => ({ ...settings }),
+        async setSetting(name, value) { settings[name] = value; },
 
         listGroups: async () => groups.map((g, position) => ({ ...g, position })),
         async saveAllocation({ groups: list, removed, instruments: forInstruments, accounts: forAccounts }) {

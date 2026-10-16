@@ -148,3 +148,16 @@ test('a failing symbol is reported, and a fresh check isn\'t repeated', async ()
     const updater = createMarketUpdater(data, { fetch: net.fetch, log: () => {} });
     assert.equal(await updater.refreshIfStale(), false, 'checked moments ago');
 });
+
+test('the benchmark gets prices from a week before the first ledger row, and stays up to date though nothing is held', async () => {
+    const data = await imported();
+    const id = await data.createInstrument({ symbol: 'VWCE.DE', name: 'VWCE.DE (benchmark)', isin: null, kind: 'etf', currency: 'EUR', distributing: null, assetClass: null, priceSymbol: 'VWCE.DE', priceSource: 'yahoo' });
+    await data.setSetting('benchmark_instrument', String(id));
+    const net = fakeNet();
+    const now = () => Date.parse('2026-10-15T20:00:00Z');
+    await updateMarketData(data, { fetch: net.fetch, now, log: () => {} });
+    assert.match(net.requests.find(u => u.includes('VWCE.DE')), /period1=1640304000&/, 'from 2021-12-24, a week before the first ledger row');
+    net.requests.length = 0;
+    await updateMarketData(data, { fetch: net.fetch, now, log: () => {} });
+    assert.ok(net.requests.some(u => u.includes('VWCE.DE')), 'fetched again, unlike sold instruments');
+});
