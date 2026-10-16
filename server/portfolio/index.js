@@ -5,7 +5,7 @@ import { allocation } from '../lib/allocation.js';
 import { benchmark } from '../lib/benchmark.js';
 import { backup, transactionsCsv } from '../lib/export.js';
 import { DEFAULT_DIVIDEND_RATE, DEFAULT_RATE, taxYear } from '../lib/tax.js';
-import { fixed } from '../lib/decimal.js';
+import { div, fixed } from '../lib/decimal.js';
 import { summariseP2p } from '../lib/p2p.js';
 import { project, spreadOf } from '../lib/projection.js';
 import { createReports } from '../lib/reports.js';
@@ -22,6 +22,8 @@ import { dashboardContent, dashboardNotices } from './dashboard-views.js';
 import { exportContent } from './export-views.js';
 import { taxContent, taxCsv } from './tax-views.js';
 import { projectionContent } from './projection-views.js';
+import { instrumentContent } from './instrument-views.js';
+import { positions } from '../lib/holdings.js';
 import { CHART_SCRIPTS, reportsContent, yearContent, yearCsv, yearsCsv } from './reports-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
@@ -93,6 +95,26 @@ export function createPortfolio({ data, market = null, render, send, message, no
         const updating = market ? await market.refreshIfStale() || market.running : false;
         const [{ accounts, instruments, valuation }, status] = await Promise.all([valueAll(), data.marketStatus()]);
         page(req, res, 'Holdings', holdingsContent({ valuation, instruments, accounts, status, updating, csrf: req.session.csrf }));
+    });
+
+    // One holding: its figures, price chart with your trades, and transactions
+    router.get('/holdings/:id', async (req, res, next) => {
+        const id = Number(req.params.id);
+        const instrument = await data.getInstrument(id);
+        if (!instrument) return next();
+        const [{ valuation }, prices] = await Promise.all([valueAll(), data.listPrices()]);
+        const trades = (await data.listTransactions({ instrumentId: id }));
+        // The average cost a unit after each buy or sale, in the instrument's currency
+        const ledger = trades.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId }));
+        const averages = trades.filter(t => ['buy', 'sell', 'shares_in', 'shares_out'].includes(t.type)).map(t => {
+            const p = positions(ledger.filter(r => r.date <= t.date)).get(id);
+            return { date: t.date, average: p && p.units > 0n ? div(p.cost, p.units) : 0n };
+        });
+        page(req, res, instrument.symbol, instrumentContent({
+            instrument, trades, averages,
+            position: valuation.positions.find(p => p.instrument === id) ?? null,
+            prices: prices.filter(p => p.instrumentId === id),
+        }), 200, CHART_SCRIPTS);
     });
 
     // Waits for the update (up to a minute), then shows the holdings again
