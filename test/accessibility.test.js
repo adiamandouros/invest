@@ -14,6 +14,7 @@ import { allocation } from '../server/lib/allocation.js';
 import { dec } from '../server/lib/decimal.js';
 import { summariseP2p } from '../server/lib/p2p.js';
 import { createReports } from '../server/lib/reports.js';
+import { createInflation } from '../server/lib/inflation.js';
 import { reportsContent, yearContent } from '../server/portfolio/reports-views.js';
 import { dashboardContent, dashboardNotices } from '../server/portfolio/dashboard-views.js';
 import { project } from '../server/lib/projection.js';
@@ -143,6 +144,16 @@ const all = {
         total: valuation.total, year: reports.year(2026), series: reports.series(), income: reports.income(), groups: null,
         benchmark: { name: 'VWCE.DE', result: { value: 50000000000n, xirr: 0.08, series: reports.series().map(p => ({ date: p.date, value: 40000000000n })) } },
     })),
+    '/reports (inflation)': page('Reports', (() => {
+        const withPrices = createReports({
+            transactions: data.transactions, accounts: new Map(data.accounts.map(a => [a.id, a])), instruments: new Map(data.instruments.map(i => [i.id, i])),
+            balances: data.balances, groups: data.groups, today: '2026-10-15',
+            priceOf: createPrices([{ instrumentId: 1, date: '2026-10-15', close: '149.5', currency: 'USD' }]),
+            eurPer: createRates([{ currency: 'USD', date: '2022-01-03', perEur: '1.13' }]),
+            inflation: createInflation([{ month: '2021-12', index: '100' }, { month: '2025-12', index: '120' }]),
+        });
+        return reportsContent({ total: { ...withPrices.total(), firstDate: withPrices.firstDate }, years: withPrices.years.map(withPrices.year), csrf: 'token' });
+    })()),
     '/reports (empty)': page('Reports', reportsContent({ total: null, years: [] })),
     '/reports/2025': page('Report 2025', yearContent({ report: reports.year(2025), years: reports.years })),
     '/p2p': page('P2P lending', p2pListContent({ summaries: [p2pSummary] })),

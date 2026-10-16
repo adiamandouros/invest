@@ -1,18 +1,25 @@
 import { positions } from '../lib/holdings.js';
-import { fetchRates } from './ecb.js';
+import { fetchPriceIndex, fetchRates } from './ecb.js';
 import { fetchHistory, suggestSymbol } from './yahoo.js';
 
 // Brings prices and exchange rates up to date: for each instrument still
 // held, the closes since the last stored one (or since its first
 // transaction); for one sold since, its history once, so past years can be
 // valued; for the benchmark (server/lib/benchmark.js), from the first
-// ledger row; and ECB rates for every currency the ledger uses. One request
+// ledger row; ECB rates for every currency the ledger uses; and Greece's
+// monthly consumer price index, for figures after inflation. One request
 // per instrument and one for all rates. `data` is server/data/store.js.
 
 const DAY_MS = 86_400_000;
 const STALE_MS = 6 * 3_600_000; // prices older than this are refreshed when a page needs them
 const RETRY_MS = 10 * 60_000;   // and not tried again sooner than this after a failure
 const weekBefore = date => new Date(Date.parse(`${date}T00:00:00Z`) - 7 * DAY_MS).toISOString().slice(0, 10);
+// Greece's consumer prices (HICP) for figures after inflation (server/lib/inflation.js)
+export const INFLATION_AREA = 'GR';
+const nextMonth = month => {
+    const [y, m] = month.split('-').map(Number);
+    return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+};
 const nextDay = date => new Date(Date.parse(`${date}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 
 export async function updateMarketData(data, { fetch = globalThis.fetch, now = Date.now, log = console.log } = {}) {
@@ -78,7 +85,21 @@ export async function updateMarketData(data, { fetch = globalThis.fetch, now = D
     await data.setMarketStatus('fx', fxProblems.length === 0, fxProblems.join('; ') || `${rates} new rates`);
     problems.push(...fxProblems);
 
-    log(`[market] ${prices} prices, ${rates} rates${problems.length ? `; problems: ${problems.join('; ')}` : ''}`);
+    // ── Consumer prices: the months after the last one stored ──
+    let months = 0;
+    try {
+        const known = await data.listPriceIndex(INFLATION_AREA);
+        const from = known.length ? nextMonth(known.at(-1).month) : `${Number(earliest.slice(0, 4)) - 1}-12`;
+        const found = await fetchPriceIndex(INFLATION_AREA, from, { fetch });
+        await data.savePriceIndex(found);
+        months = found.length;
+        await data.setMarketStatus('inflation', true, `${months} new months`);
+    } catch (err) {
+        await data.setMarketStatus('inflation', false, `Consumer prices: ${err.message}`);
+        problems.push(`Consumer prices: ${err.message}`);
+    }
+
+    log(`[market] ${prices} prices, ${rates} rates, ${months} months of consumer prices${problems.length ? `; problems: ${problems.join('; ')}` : ''}`);
     return { prices, rates, problems };
 }
 

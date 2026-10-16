@@ -24,6 +24,9 @@ function summary(r, { xirr = false } = {}) {
     <div><dt>Gain</dt><dd>${eur(r.gain, true)}</dd></div>
     <div><dt>Value at the end</dt><dd>${eur(r.endValue)}</dd></div>
     <div><dt>${xirr ? 'Return a year' : 'Return in the period'}</dt><dd>${percent(xirr ? r.xirr : r.periodReturn)}</dd></div>
+    ${xirr && r.realXirr !== null && r.realXirr !== undefined ? `<div><dt>Return a year after inflation</dt><dd>${percent(r.realXirr)}</dd></div>` : ''}
+    ${!xirr && r.inflation !== null && r.inflation !== undefined ? `<div><dt>Prices rose</dt><dd>${percent(r.inflation)}</dd></div>
+    <div><dt>Return after inflation</dt><dd>${percent(r.realReturn)}</dd></div>` : ''}
 </dl>`;
 }
 
@@ -129,12 +132,14 @@ ${invalid ? '<div class="alert alert-danger" role="alert" id="symbol-error">Ente
 
 export function reportsContent({ total, years, csrf = '', benchmark = null, invalidSymbol = false }) {
     if (!total) return NOTHING_YET;
+    const withInflation = years.some(y => y.inflation !== null && y.inflation !== undefined);
     const yearRows = years.map(y => `            <tr>
                 ${td(`<a href="/reports/${y.year}">${y.year}</a>`)}
                 ${td(eur(y.startValue), true)}
                 ${td(eur(y.putIn, true), true)}
                 ${td(eur(y.gain, true), true)}
                 ${td(percent(y.periodReturn), true)}
+                ${withInflation ? td(percent(y.inflation), true) + td(percent(y.realReturn), true) : ''}
                 ${td(eur(y.endValue), true)}
                 ${td(eur(y.interest, true), true)}
                 ${td(eur(y.dividends, true), true)}
@@ -147,9 +152,10 @@ export function reportsContent({ total, years, csrf = '', benchmark = null, inva
 <h2 class="fs-5 mt-4">Everything so far, since ${esc(total.firstDate)}</h2>
 ${summary(total, { xirr: true })}
 ${benchmarkSection(benchmark, total, csrf, invalidSymbol)}
-${table('years-heading', 'By year', th('Year') + th('At the start', true) + th('Put in', true) + th('Gain', true) + th('Return', true) + th('At the end', true)
+${table('years-heading', 'By year', th('Year') + th('At the start', true) + th('Put in', true) + th('Gain', true) + th('Return', true)
+        + (withInflation ? th('Prices rose', true) + th('Return after inflation', true) : '') + th('At the end', true)
         + th('P2P interest', true) + th('Dividends', true) + th('Realised gains', true) + th('Tax withheld', true) + th('Fees', true), yearRows)}
-<p class="small text-secondary-emphasis">Return is the money-weighted return within each year (not a yearly rate for the current one). Gain = value at the end − value at the start − money put in.</p>
+<p class="small text-secondary-emphasis">Return is the money-weighted return within each year (not a yearly rate for the current one). Gain = value at the end − value at the start − money put in.${withInflation ? ` Inflation is Greece's consumer prices (HICP) from the ECB, known up to ${esc(total.inflationUntil ?? '')}; later months count as no rise until they're published.` : ''}</p>
 ${groupsNow('groups-now', 'Allocation now', total.groups)}
 ${groupsOverTime('groups-years', years)}
 ${holdingsTable('holdings-heading', 'By holding, since the start', total)}
@@ -180,9 +186,9 @@ const rate = value => (value === null || value === undefined ? null : (value * 1
 export function yearsCsv(years) {
     return csv([
         ['Year', 'From', 'To', 'Value at start (EUR)', 'Put in (EUR)', 'Gain (EUR)', 'Return (%)', 'Value at end (EUR)',
-            'P2P interest (EUR)', 'Dividends (EUR)', 'Realised gains (EUR)', 'Tax withheld (EUR)', 'Fees (EUR)'],
+            'P2P interest (EUR)', 'Dividends (EUR)', 'Realised gains (EUR)', 'Tax withheld (EUR)', 'Fees (EUR)', 'Prices rose (%)', 'Return after inflation (%)'],
         ...years.map(y => [y.year, y.from, y.to, y.startValue, y.putIn, y.gain, rate(y.periodReturn), y.endValue,
-            y.interest, y.dividends, y.realised, y.tax, y.fees]),
+            y.interest, y.dividends, y.realised, y.tax, y.fees, rate(y.inflation), rate(y.realReturn)]),
     ]);
 }
 

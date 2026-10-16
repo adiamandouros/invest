@@ -26,7 +26,9 @@ function field(name, label, values, errors, { hint = '', attrs = decimal } = {})
 
 // `values`: the form's fields as text; `split`: how the monthly amount is shared, as text
 // `plan`: { goal, year, monthly, safer } for a goal, or null
-export function projectionContent({ history, values, errors = {}, projection = null, split = '', thisYear, plan = null }) {
+// `inflation`: expected rise in prices a year (e.g. 0.02), for figures in today's money
+export function projectionContent({ history, values, errors = {}, projection = null, split = '', thisYear, plan = null, inflation = 0 }) {
+    const today = (value, year) => value / (1 + inflation) ** year;
     if (!history.length) {
         const goalSection = !plan ? '' : `<h2 class="fs-5 mt-4" id="goal-heading">To reach ${eur(plan.goal)} by ${plan.year}</h2>
 ${plan.monthly === 0 ? `<p>You'd get there without adding anything, at the returns you expect.</p>`
@@ -50,6 +52,7 @@ ${plan.monthly === 0 ? `<p>You'd get there without adding anything, at the retur
     const form = `<form method="get" action="/projection" class="edit-form" novalidate aria-labelledby="assumptions-heading">
 ${field('years', 'Years ahead', values, errors, { attrs: 'inputmode="numeric" autocomplete="off"', hint: 'From 1 to 50.' })}
 ${field('monthly', 'Invested each month (EUR)', values, errors, { hint: split ? `Shared out ${esc(split)}.` : '' })}
+${field('inflation', 'Prices rise a year (%)', values, errors, { hint: 'To show the results in today\'s money too. 2 is the ECB\'s aim for the euro.' })}
     <fieldset>
         <legend class="fs-6">Expected return a year, per group (%)</legend>
 ${history.map(g => field(`rate-${keyOf(g)}`, esc(g.name), values, errors, {
@@ -68,18 +71,20 @@ ${field('goalYear', 'By the end of', values, errors, { attrs: 'inputmode="numeri
     if (projection) {
         const last = projection.at(-1);
         const years = last.year;
-        const head = th('Year') + history.map(g => th(esc(g.name), true)).join('') + th('Total', true) + th('Range', true) + th('Added so far', true);
+        const head = th('Year') + history.map(g => th(esc(g.name), true)).join('') + th('Total', true) + th('Range', true) + th('In today\'s money', true) + th('Added so far', true);
         const rows = projection.slice(1).map(p => `            <tr>
                 ${td(String(thisYear + p.year))}
                 ${p.groups.map(g => td(eur(g.mid), true)).join('')}
                 ${td(`<strong>${eur(p.total.mid)}</strong>`, true)}
                 ${td(p.total.low === p.total.high ? '—' : `${eur(p.total.low)} to ${eur(p.total.high)}`, true)}
+                ${td(eur(today(p.total.mid, p.year)), true)}
                 ${td(eur(p.contributed), true)}
             </tr>`).join('\n');
         const label = `Projected value of each group at the end of each year, from ${thisYear + 1} to ${thisYear + years}, reaching ${whole.format(last.total.mid)} in total. The table below has the figures.`;
         results = `<h2 class="fs-5 mt-4" id="result-heading">In ${years} year${years === 1 ? '' : 's'}, in ${thisYear + years}</h2>
 <dl class="summary">
     <div><dt>Projected value</dt><dd>${eur(last.total.mid)}</dd></div>
+    <div><dt>In today's money</dt><dd>${eur(today(last.total.mid, years))}</dd></div>
     <div><dt>Lower estimate</dt><dd>${eur(last.total.low)}</dd></div>
     <div><dt>Higher estimate</dt><dd>${eur(last.total.high)}</dd></div>
     <div><dt>Of which added</dt><dd>${eur(last.contributed)}</dd></div>

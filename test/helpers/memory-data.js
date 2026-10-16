@@ -10,6 +10,7 @@ export function createMemoryData() {
     const balances = [];
     const groups = [];
     const settings = {};
+    const priceIndex = [];
     const lastBy = (list, key) => {
         const last = {};
         for (const r of list) if (!last[r[key]] || r.date > last[r[key]]) last[r[key]] = r.date;
@@ -31,6 +32,7 @@ export function createMemoryData() {
         balances,
         groups,
         settingsStore: settings,
+        priceIndex,
 
         listAccounts: async () => [...accounts].sort((a, b) => a.name.localeCompare(b.name)),
         findAccount: async (platform, externalRef) => [...accounts].sort((a, b) => a.id - b.id)
@@ -85,6 +87,9 @@ export function createMemoryData() {
         async updateTransaction(id, t) { Object.assign(transactions.find(x => x.id === id), t); },
         async deleteTransaction(id) { transactions.splice(transactions.findIndex(x => x.id === id), 1); },
 
+        listPriceIndex: async area => priceIndex.filter(r => r.area === area).sort((a, b) => (a.month < b.month ? -1 : 1))
+            .map(r => ({ month: r.month, index: r.index })),
+        async savePriceIndex(list) { for (const r of list) upsert(priceIndex, { ...r }, x => x.area === r.area && x.month === r.month); },
         settings: async () => ({ ...settings }),
         async setSetting(name, value) { settings[name] = value; },
 
