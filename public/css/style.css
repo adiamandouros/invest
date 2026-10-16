@@ -57,6 +57,23 @@ body {
     text-underline-offset: 6px;
 }
 
+/* Phones: the page links in one row that scrolls sideways, under the name,
+   Settings and Sign out, instead of several wrapped rows */
+@media (max-width: 767.98px) {
+    .site-pages {
+        order: 3;
+        width: 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #4a5160 #161b27;
+    }
+
+    .site-pages .nav-link {
+        white-space: nowrap;
+    }
+}
+
 main:focus {
     outline: none;
 }
