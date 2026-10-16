@@ -1,0 +1,146 @@
+<div class="help">
+<h1 class="fs-3">Help</h1>
+<p>How to keep the app up to date, what every page does, and what the numbers mean. It's written to be read in a year or two, when the details have faded.</p>
+
+<nav aria-labelledby="help-contents">
+    <h2 class="fs-5" id="help-contents">Contents</h2>
+    <ol>
+        <li><a href="#routine">The routine: keeping it up to date</a></li>
+        <li><a href="#importing">Importing statements</a></li>
+        <li><a href="#by-hand">Adding things by hand</a></li>
+        <li><a href="#pages">The pages</a></li>
+        <li><a href="#numbers">What the numbers mean</a></li>
+        <li><a href="#wrong">When something looks wrong</a></li>
+        <li><a href="#server">On the server</a></li>
+    </ol>
+</nav>
+
+<h2 class="fs-4 mt-5" id="routine">1. The routine: keeping it up to date</h2>
+<p>Prices, exchange rates and inflation figures update by themselves whenever you open the Overview or Holdings (if they're more than six hours old). Your own transactions don't: they come from the statements you import. Every month or two, or after you buy, sell, deposit or withdraw:</p>
+<ol>
+    <li><strong>Freedom24:</strong> export the broker report as JSON and import it (<a href="#import-freedom24">how</a>).</li>
+    <li><strong>Mintos:</strong> export the account statement as CSV and import it (<a href="#import-mintos">how</a>).</li>
+    <li><strong>PeerBerry:</strong> export the transactions as Excel and import them, every file from your first deposit on together (<a href="#import-peerberry">how</a>).</li>
+    <li>Open the <a href="/">Overview</a> and read anything in a coloured box at the top: it's what needs a look (old prices, an account not imported lately, a holding without a group, an allocation that has drifted).</li>
+    <li>If you bought something new: give it a group on <a href="/allocation/edit">Allocation</a>, and check <a href="/holdings">Holdings</a> shows a price for it.</li>
+</ol>
+<p>Before investing new money, open <a href="/allocation">Allocation</a> and type the amount into "Invest an amount": it says how much to put into each group to get back to your targets.</p>
+<p>Once a year, for your tax return, open <a href="/tax">Tax</a> (see <a href="#page-tax">Tax</a> below). Now and then, download a backup from <a href="/export">Settings → Export your data</a>.</p>
+
+<h2 class="fs-4 mt-5" id="importing">2. Importing statements</h2>
+<p>Go to <a href="/import">Import</a>, choose the file or files, and press "Preview the import". Nothing is saved yet: the preview shows what would be added and checks the result against the statement's own figures. If everything says "Matches", press Import. Some rules that hold for every platform:</p>
+<ul>
+    <li><strong>Importing again is safe.</strong> Rows already in the app are recognised and skipped, so you can always export the whole period from the start; overlapping files are fine too.</li>
+    <li><strong>Several files at once</strong> work, as long as they're from one platform, like one file per year.</li>
+    <li><strong>P2P platforms list every loan's interest separately</strong> (tens of thousands of rows a year). The app adds them up into one row per month for interest, tax and fees; deposits and withdrawals stay one row each. A month that was only partly in an earlier file is completed by a later file that has the whole month.</li>
+    <li><strong>Import the oldest first</strong>, or all files together. A P2P check that says the money in loans is negative means earlier statements are missing.</li>
+</ul>
+
+<h3 class="fs-5 mt-4" id="import-freedom24">Freedom24 (ETFs)</h3>
+<p>In Freedom24: <strong>Reports → Broker report</strong>, choose the period (simplest: from your first trade to today) and the <strong>JSON</strong> format. Upload the .json file. It brings in trades, deposits, withdrawals, currency exchanges, dividends, withheld tax and fees, and a new ETF is created automatically. The preview compares the cash and units with the report's closing balances.</p>
+
+<h3 class="fs-5 mt-4" id="import-mintos">Mintos</h3>
+<p>In Mintos: <strong>Account → Account statement</strong>, choose the period, then <strong>Download → CSV</strong>. Upload the .csv file (the files are big; that's normal). The preview checks the statement's rows add up to its closing cash.</p>
+
+<h3 class="fs-5 mt-4" id="import-peerberry">PeerBerry</h3>
+<p>In PeerBerry: <strong>Transactions</strong>, all types, then export to <strong>Excel</strong> (.xlsx). PeerBerry's files have no balance column, so the app works out the cash from your first deposit on: <strong>upload every file from the first one on together</strong>. A later file on its own still imports, but can't be checked, and the preview says so.</p>
+
+<h2 class="fs-4 mt-5" id="by-hand">3. Adding things by hand</h2>
+<p>For a quick trade before the next statement, or anything a statement doesn't cover:</p>
+<ul>
+    <li><strong>A new ETF or share:</strong> <a href="/instruments/new">Instruments → Add an instrument</a>, with its symbol, name, ISIN and currency. Leave "Yahoo Finance symbol" empty and the app guesses it; if no price appears, set it to the symbol as on finance.yahoo.com (like VWCE.DE or VUAA.L).</li>
+    <li><strong>A transaction:</strong> <a href="/transactions/new">Transactions → Add a transaction</a>. Amounts are always entered as positive numbers: the type says whether money came in or went out. For an amount not in euros, the EUR rate can be left empty and the ECB's for that day is used.</li>
+    <li><strong>Money sent to a broker</strong> is a Deposit. Leave it out and "Put in" and the returns will be wrong.</li>
+    <li><strong>A P2P account's value</strong> as the platform shows it: on the account's page under <a href="/p2p">P2P</a>, "Add a balance". From that day on, it replaces the statements' figure, so losses on loans that defaulted are counted.</li>
+</ul>
+<div class="alert alert-warning" role="note"><strong>Don't add a trade by hand and then import a statement that has it:</strong> the import doesn't recognise hand-entered rows and would add it a second time. Either import for that account always, or delete the hand-entered row before importing.</div>
+
+<h2 class="fs-4 mt-5" id="pages">4. The pages</h2>
+
+<h3 class="fs-5 mt-4" id="page-overview">Overview</h3>
+<p>The start page: what everything is worth, what you've put in, the gain, the return a year (also after inflation), and this year so far. Below: things to look at, a comparison with your benchmark, the value over time against money put in, P2P interest and dividends per month, and the allocation against its targets. Under each chart, "The figures" opens a table with the same numbers.</p>
+
+<h3 class="fs-5 mt-4" id="page-holdings">Holdings</h3>
+<p>Each ETF or share you hold: units, price, value, cost, gains, dividends, return a year; then sold positions, P2P accounts and cash. "Update now" fetches prices straight away. Click a holding for its own page: its figures, a price chart with your buys (▲) and sales (▼) and your average cost (dashed line), and its transactions.</p>
+
+<h3 class="fs-5 mt-4" id="page-p2p">P2P</h3>
+<p>Mintos and PeerBerry: value, put in, gain, return a year, and cash not lent out. Each account's page has income by year and by month, and its balances (see <a href="#by-hand">adding a P2P balance</a>).</p>
+
+<h3 class="fs-5 mt-4" id="page-allocation">Allocation</h3>
+<p>Your groups and targets, like 60% S&amp;P 500, 10% international, 30% P2P lending. "Set groups and targets" changes them and which holding belongs to which group. The page shows how far each group is off, and <strong>"Invest an amount"</strong> splits money you're about to invest so the groups get back to their targets. It never sells: a group above target gets nothing, and if the amount is too small to reach the targets, it says what would.</p>
+
+<h3 class="fs-5 mt-4" id="page-reports">Reports</h3>
+<p>Everything since the start, and one row per year: value at the start and end, money put in, gain, return, inflation and the return after it, interest, dividends, realised gains, tax and fees. Click a year for each holding's part in it. Charts show the groups' shares now and at the end of each year. "Download (CSV)" gives the figures for a spreadsheet, and the page prints cleanly.</p>
+<p><strong>Against a benchmark:</strong> enter a Yahoo Finance symbol (VWCE.DE, the all-world ETF, is suggested) and the app replays every deposit and withdrawal you made, on the same days, into it. If you're behind it, simply buying it would have done better.</p>
+
+<h3 class="fs-5 mt-4" id="page-projection">Projection</h3>
+<p>Where each group could be in some years. Enter how many years, what you'll invest each month (shared out by your targets), how much prices may rise, and the return you expect for each group; past returns are filled in, but a few good years make them look better than is likely over decades (6–8% a year is a common planning figure for shares). The result has a lower and a higher estimate: about two times in three, the outcome lands between them. <strong>A goal</strong> (an amount by a year) gives the monthly amount needed, and a safer amount for the lower estimate.</p>
+
+<h3 class="fs-5 mt-4" id="page-tax">Tax</h3>
+<p>The figures for the Greek tax return (E1), one page per year, in euros at the ECB rate on each day:</p>
+<ul>
+    <li><strong>P2P interest</strong> per platform, with tax withheld abroad and an estimate of the Greek tax (15%, less what was withheld, up to that tax).</li>
+    <li><strong>ETFs and shares</strong> with dividends and realised gains. UCITS funds (European ones, with an IE or LU ISIN, like VUAA and VWRA) are tax-free; they're shown for your records.</li>
+    <li><strong>Dividends taxed in Greece:</strong> from funds that aren't UCITS, like the US-listed VTI, and from shares. They go on the return at 5%; the US withholding usually covers it, leaving nothing to pay.</li>
+</ul>
+<p>The rates can be changed on the page if the rules change. The tax figures are estimates: check them against the platforms' own yearly tax reports and the tax office.</p>
+
+<h3 class="fs-5 mt-4" id="page-other">Transactions, Instruments, Accounts</h3>
+<p>Everything recorded, to look through, correct or delete. "Edit" on any row; rows that came from a statement say so.</p>
+
+<h3 class="fs-5 mt-4" id="page-settings">Settings</h3>
+<p>Change your password; move to a new authenticator app (for a new phone: you enter your password and a current code, scan a new QR code, then enter a code from the new app); see how many devices are signed in and sign the others out; and <strong>Export your data</strong>: a full backup (JSON) or the transactions for a spreadsheet (CSV). Keep backups somewhere private.</p>
+
+<h2 class="fs-4 mt-5" id="numbers">5. What the numbers mean</h2>
+<dl class="help-terms">
+    <dt>Value</dt>
+    <dd>What everything is worth today: units × the latest closing price, in euros at today's ECB rate, plus cash, plus each P2P account (its cash plus money in loans).</dd>
+    <dt>Put in</dt>
+    <dd>Deposits minus withdrawals, in euros on the day. It can be negative: if you've taken out more than you put in, the rest came from what the account earned.</dd>
+    <dt>Gain</dt>
+    <dd>Value − Put in. Everything earned: price rises, interest, dividends, sales, less fees and tax.</dd>
+    <dt>Return a year</dt>
+    <dd>The money-weighted return (XIRR): the yearly rate that accounts for when money went in and out, so a deposit last month doesn't count as if it had been there for years. "After inflation" does the same with every amount in today's euros.</dd>
+    <dt>Return (in a year or period)</dt>
+    <dd>The money-weighted return over that period itself, not turned into a yearly rate.</dd>
+    <dt>Cost and average cost</dt>
+    <dd>What you paid, fees included. Sales use up the oldest units first (FIFO), so the cost left is that of the newest units.</dd>
+    <dt>Realised and unrealised gains</dt>
+    <dd>Realised: made on what you sold. Unrealised ("not yet taken"): on what you still hold, if sold today.</dd>
+    <dt>P2P value, cash and loans</dt>
+    <dd>A P2P account's value is its cash plus its loans at their nominal value; investing and repayments only move money between the two. Losses only show once you enter a balance from the platform.</dd>
+    <dt>Allocation, share and drift</dt>
+    <dd>A group's share is its value against the total of all groups. When a group is more than 5 percentage points from its target, the Overview says it has drifted.</dd>
+    <dt>Benchmark</dt>
+    <dd>The same money, on the same days, all in one fund instead. Ahead means your choices did better than that.</dd>
+    <dt>Inflation</dt>
+    <dd>Greece's consumer prices (HICP), from the ECB, by month. Months not yet published count as no rise; the reports say up to which month figures are known.</dd>
+</dl>
+
+<h2 class="fs-4 mt-5" id="wrong">6. When something looks wrong</h2>
+<dl class="help-terms">
+    <dt>A holding has no price, or the totals say "unknown"</dt>
+    <dd>Edit the instrument and set its Yahoo Finance symbol as on finance.yahoo.com, then press "Update now" on Holdings. If it's no longer traded, choose "Prices: None".</dd>
+    <dt>Prices are days old</dt>
+    <dd>Press "Update now" on Holdings. If the Overview reports a problem with the update, Yahoo Finance or the ECB may be down for a while; it's tried again later.</dd>
+    <dt>An import's check says "Differs"</dt>
+    <dd>Something in the statement wasn't understood (the preview lists unknown rows), or earlier statements are missing. You can still import and correct rows by hand on Transactions.</dd>
+    <dt>A P2P platform has a new kind of row</dt>
+    <dd>The preview names it and leaves it out. Add it by hand, or ask for the importer to learn it.</dd>
+    <dt>A transaction is counted twice</dt>
+    <dd>Usually a hand-entered trade that a statement later brought in too. Delete the hand-entered one on Transactions.</dd>
+    <dt>Lost the phone with the authenticator app</dt>
+    <dd>Run <code>npm run create-user -- --reset-2fa</code> on the server (see <a href="#server">below</a>), then sign in and set it up again.</dd>
+    <dt>"Too many failed attempts"</dt>
+    <dd>After 5 wrong passwords or codes from one device, or 10 in a row on the account, signing in is blocked for 15 minutes. Wait and try again.</dd>
+</dl>
+
+<h2 class="fs-4 mt-5" id="server">7. On the server</h2>
+<p>The app runs on the Mediahost cPanel, at <code>~/repositories/invest</code>. Use cPanel → Terminal.</p>
+<ul>
+    <li><strong>After merging a change on GitHub:</strong> <code>bash ~/repositories/invest/scripts/deploy.sh</code>. It fetches the code, installs packages if needed, applies database changes, restarts the app and waits until the new version runs.</li>
+    <li><strong>A new password, or a lost authenticator:</strong> <code>cd ~/repositories/invest &amp;&amp; source ~/nodevenv/repositories/invest/20/bin/activate &amp;&amp; npm run create-user</code> (add <code>-- --reset-2fa</code> to turn the code off).</li>
+    <li><strong>The site doesn't show a change, or hangs:</strong> run the deploy script again; it stops a stuck process. <code>/health</code> shows the version that runs.</li>
+    <li><strong>Backups:</strong> Mediahost backs up the database; <a href="/export">Export your data</a> is your own copy on top.</li>
+</ul>
+</div>

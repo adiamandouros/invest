@@ -92,3 +92,15 @@ test('the sign-out button shows only for a signed-in session', () => {
     assert.match(page, /action="\/logout"/);
     assert.match(page, /name="_csrf" value="a&quot;b"/);
 });
+
+test('the help page: signed in only, linked from the header, with its contents', async () => {
+    const { renderPages } = await import('../server/pages.js');
+    const html = renderPages(undefined, { stage: 'full', csrf: 't' }).pages['/help'];
+    assert.match(html, /<title>Help — Invest<\/title>/);
+    assert.match(html, /href="\/help" aria-current="page"/);
+    for (const id of ['routine', 'importing', 'by-hand', 'pages', 'numbers', 'wrong', 'server']) {
+        assert.match(html, new RegExp(`href="#${id}"`), `contents link to #${id}`);
+        assert.match(html, new RegExp(`id="${id}"`), `section #${id}`);
+    }
+    assert.match(renderPages(undefined, { stage: 'full', csrf: 't' }).pages['/'], /href="\/help">/, 'linked from every page');
+});

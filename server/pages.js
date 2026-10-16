@@ -74,6 +74,9 @@ function navigation(session, path) {
         `<li class="nav-item"><a class="nav-link" href="${href}"${current(href, path) ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
     return `            <ul class="nav site-pages">${links}</ul>
             <div class="ms-auto d-flex align-items-center column-gap-2">
+                <a class="nav-link" href="/help"${path === '/help' ? ' aria-current="page"' : ''}>
+                    <i class="bi bi-question-circle me-1" aria-hidden="true"></i>Help
+                </a>
                 <a class="nav-link" href="/settings"${path === '/settings' ? ' aria-current="page"' : ''}>
                     <i class="bi bi-gear me-1" aria-hidden="true"></i>Settings
                 </a>
@@ -102,6 +105,7 @@ export function createRenderer() {
 // The fixed pages, by path, for signed-in users
 export const PAGES = {
     '/': { title: 'Overview', view: 'home' },
+    '/help': { title: 'Help', view: 'help' },
 };
 
 // A short page with a heading and one sentence (errors, refusals)

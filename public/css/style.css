@@ -277,3 +277,17 @@ textarea:focus-visible,
     font-size: 0.875rem;
     font-weight: 400;
 }
+
+/* ── Help: a readable line length, and terms with their explanations ── */
+
+.help {
+    max-width: 48rem;
+}
+
+.help-terms dt {
+    margin-top: 1rem;
+}
+
+.help-terms dd {
+    margin-left: 0;
+}
