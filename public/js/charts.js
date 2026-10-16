@@ -25,8 +25,8 @@ function inEuros(canvas, data, line) {
             labels: data.labels,
             datasets: data.series.map((s, i) => ({
                 label: s.name, data: s.values, backgroundColor: COLOURS[i], borderColor: COLOURS[i],
-                // The second line (money put in) dashed, so the two differ by more than colour
-                borderDash: line && i > 0 ? [6, 4] : [], pointRadius: 0, pointHitRadius: 8, borderWidth: 2, stepped: line && i > 0,
+                // Lines differ by more than colour: money put in dashed and stepped, a benchmark dotted
+                borderDash: line && i === 1 ? [6, 4] : line && i > 1 ? [2, 3] : [], pointRadius: 0, pointHitRadius: 8, borderWidth: 2, stepped: line && i === 1,
             })),
         },
         options: {

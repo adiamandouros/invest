@@ -125,6 +125,14 @@ const all = {
     })),
     '/projection (empty)': page('Projection', projectionContent({ history: [], values: {}, thisYear: 2026 })),
     '/reports': render({ title: 'Reports', session, content: reportsContent({ total: { ...reports.total(), firstDate: reports.firstDate }, years: reports.years.map(reports.year) }) }),
+    '/reports (benchmark)': page('Reports', reportsContent({
+        total: { ...reports.total(), firstDate: reports.firstDate }, years: reports.years.map(reports.year), csrf: 'token', invalidSymbol: true,
+        benchmark: { name: 'VWCE.DE', symbol: 'VWCE.DE', result: { value: 50000000000n, xirr: 0.08, series: [], firstPrice: '2019-07-24' } },
+    })),
+    '/ (overview, benchmark)': page('Overview', dashboardContent({
+        total: valuation.total, year: reports.year(2026), series: reports.series(), income: reports.income(), groups: null,
+        benchmark: { name: 'VWCE.DE', result: { value: 50000000000n, xirr: 0.08, series: reports.series().map(p => ({ date: p.date, value: 40000000000n })) } },
+    })),
     '/reports (empty)': page('Reports', reportsContent({ total: null, years: [] })),
     '/reports/2025': page('Report 2025', yearContent({ report: reports.year(2025), years: reports.years })),
     '/p2p': page('P2P lending', p2pListContent({ summaries: [p2pSummary] })),

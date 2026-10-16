@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { applyImport, parseStatement, planImport } from '../import/index.js';
 import { allocation } from '../lib/allocation.js';
+import { benchmark } from '../lib/benchmark.js';
 import { backup, transactionsCsv } from '../lib/export.js';
 import { DEFAULT_DIVIDEND_RATE, DEFAULT_RATE, taxYear } from '../lib/tax.js';
 import { fixed } from '../lib/decimal.js';
@@ -182,8 +183,46 @@ export function createPortfolio({ data, market = null, render, send, message, no
         const content = dashboardContent({
             total: valuation.total, year: series.length ? r.year(Number(today().slice(0, 4))) : null,
             series, income: r.income(), groups: total?.groups ?? null, notices,
+            benchmark: series.length ? await compareWithBenchmark(series.map(p => p.date)) : null,
         });
         page(req, res, 'Overview', content, 200, series.length ? CHART_SCRIPTS : []);
+    });
+
+    // ── Benchmark ───────────────────────────────────────────────────────────
+
+    // The chosen benchmark: { name, symbol, ...benchmark.js result } (result null
+    // without prices yet), or null when none is chosen
+    async function compareWithBenchmark(dates = []) {
+        const settings = await data.settings();
+        const instrument = settings.benchmark_instrument ? await data.getInstrument(Number(settings.benchmark_instrument)) : null;
+        if (!instrument) return null;
+        const [transactions, prices, rates] = await Promise.all([data.listTransactions(), data.listPrices(), data.listFxRates()]);
+        const result = benchmark({
+            transactions, prices: prices.filter(p => p.instrumentId === instrument.id), eurPer: createRates(rates), today: today(), dates,
+        });
+        return { name: instrument.priceSymbol ?? instrument.symbol, symbol: instrument.priceSymbol ?? instrument.symbol, result };
+    }
+
+    const SYMBOL = /^[A-Z0-9^][A-Z0-9.^=\-]{0,31}$/;
+
+    // Choose the benchmark by its Yahoo Finance symbol, then fetch its prices (up to a minute)
+    router.post('/benchmark', form, async (req, res) => {
+        if (!checked(req, res)) return;
+        const symbol = String(req.body?.symbol ?? '').trim().toUpperCase();
+        if (!SYMBOL.test(symbol)) return res.redirect(303, '/reports?benchmark=invalid#benchmark-heading');
+        const instruments = await data.listInstruments();
+        let instrument = instruments.find(i => i.priceSymbol === symbol) ?? instruments.find(i => !i.priceSymbol && i.symbol === symbol);
+        const id = instrument?.id ?? await data.createInstrument({
+            symbol, name: `${symbol} (benchmark)`, isin: null, kind: 'etf', currency: 'EUR', distributing: null, assetClass: null,
+            priceSymbol: symbol, priceSource: 'yahoo',
+        });
+        await data.setSetting('benchmark_instrument', String(id));
+        if (market) {
+            let timer;
+            await Promise.race([market.run().catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, 60_000); })]);
+            clearTimeout(timer);
+        }
+        res.redirect(303, '/reports#benchmark-heading');
     });
 
     // ── Reports ─────────────────────────────────────────────────────────────
@@ -205,7 +244,10 @@ export function createPortfolio({ data, market = null, render, send, message, no
     router.get('/reports', async (req, res) => {
         const r = await reports();
         const total = r.firstDate ? { ...r.total(), firstDate: r.firstDate } : null;
-        page(req, res, 'Reports', reportsContent({ total, years: r.years.map(r.year) }), 200, total ? CHART_SCRIPTS : []);
+        page(req, res, 'Reports', reportsContent({
+            total, years: r.years.map(r.year), csrf: req.session.csrf,
+            benchmark: total ? await compareWithBenchmark() : null, invalidSymbol: req.query.benchmark === 'invalid',
+        }), 200, total ? CHART_SCRIPTS : []);
     });
 
     router.get('/reports.csv', async (req, res) => {

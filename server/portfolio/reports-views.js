@@ -99,7 +99,35 @@ ${rows}
 
 const NOTHING_YET = '<h1 class="fs-3">Reports</h1>\n<p>Nothing recorded yet. <a href="/import">Import a statement</a> to start.</p>';
 
-export function reportsContent({ total, years }) {
+// Your portfolio against the chosen benchmark, and the form to choose it.
+// `b`: { name, symbol, result } from the reports route, or null.
+function benchmarkSection(b, total, csrf, invalid) {
+    const r = b?.result;
+    const ahead = r?.value === null || r?.value === undefined || total.endValue === null ? null : total.endValue - r.value;
+    const figures = !b ? '<p>Choose one to see whether your choices beat simply buying it with every euro you put in.</p>'
+        : !r ? `<p>No prices for ${esc(b.symbol)} yet. Check the symbol is as on finance.yahoo.com; prices are fetched when you choose it and with every price update.</p>`
+            : `<dl class="summary">
+    <div><dt>Yours now</dt><dd>${eur(total.endValue)}</dd></div>
+    <div><dt>All in ${esc(b.name)}</dt><dd>${eur(r.value)}</dd></div>
+    <div><dt>${ahead !== null && ahead < 0n ? 'Behind it by' : 'Ahead of it by'}</dt><dd>${ahead === null ? eur(null) : eur(ahead < 0n ? -ahead : ahead)}</dd></div>
+    <div><dt>Return a year: yours / its</dt><dd>${percent(total.xirr)} / ${percent(r.xirr)}</dd></div>
+</dl>
+<p class="small text-secondary-emphasis">As if every euro you put in, at Freedom24 and the P2P platforms, had bought ${esc(b.name)} on the same day, and every withdrawal had sold it${r.firstPrice > total.firstDate ? `; money put in before its first price (${esc(r.firstPrice)}) buys at that price` : ''}.</p>`;
+    return `<h2 class="fs-5 mt-4" id="benchmark-heading">Against a benchmark</h2>
+${figures}
+${invalid ? '<div class="alert alert-danger" role="alert" id="symbol-error">Enter the symbol as Yahoo Finance shows it, like VWCE.DE.</div>' : ''}
+<form method="post" action="/benchmark" class="d-flex flex-wrap align-items-end gap-2 mb-3 no-print">
+    <input type="hidden" name="_csrf" value="${esc(csrf)}">
+    <div>
+        <label for="benchmark-symbol" class="form-label">Benchmark (Yahoo Finance symbol)</label>
+        <input id="benchmark-symbol" name="symbol" type="text" class="form-control${invalid ? ' is-invalid' : ''}" value="${esc(b?.symbol ?? 'VWCE.DE')}" autocapitalize="characters" autocomplete="off" aria-describedby="benchmark-hint${invalid ? ' symbol-error' : ''}">
+    </div>
+    <button type="submit" class="btn btn-outline-primary">${b ? 'Change' : 'Compare'}</button>
+</form>
+<p class="form-text" id="benchmark-hint">VWCE.DE is Vanguard's FTSE All-World in euros; CSPX.L or VUAA.DE follow the S&amp;P 500. Choosing one fetches its prices, which can take a minute.</p>`;
+}
+
+export function reportsContent({ total, years, csrf = '', benchmark = null, invalidSymbol = false }) {
     if (!total) return NOTHING_YET;
     const yearRows = years.map(y => `            <tr>
                 ${td(`<a href="/reports/${y.year}">${y.year}</a>`)}
@@ -118,6 +146,7 @@ export function reportsContent({ total, years }) {
 <p class="no-print"><a href="/reports.csv" class="btn btn-outline-primary">Download the years (CSV)</a></p>
 <h2 class="fs-5 mt-4">Everything so far, since ${esc(total.firstDate)}</h2>
 ${summary(total, { xirr: true })}
+${benchmarkSection(benchmark, total, csrf, invalidSymbol)}
 ${table('years-heading', 'By year', th('Year') + th('At the start', true) + th('Put in', true) + th('Gain', true) + th('Return', true) + th('At the end', true)
         + th('P2P interest', true) + th('Dividends', true) + th('Realised gains', true) + th('Tax withheld', true) + th('Fees', true), yearRows)}
 <p class="small text-secondary-emphasis">Return is the money-weighted return within each year (not a yearly rate for the current one). Gain = value at the end − value at the start − money put in.</p>

@@ -5,19 +5,22 @@ import { fetchHistory, suggestSymbol } from './yahoo.js';
 // Brings prices and exchange rates up to date: for each instrument still
 // held, the closes since the last stored one (or since its first
 // transaction); for one sold since, its history once, so past years can be
-// valued; and ECB rates for every currency the ledger uses. One request
+// valued; for the benchmark (server/lib/benchmark.js), from the first
+// ledger row; and ECB rates for every currency the ledger uses. One request
 // per instrument and one for all rates. `data` is server/data/store.js.
 
 const DAY_MS = 86_400_000;
 const STALE_MS = 6 * 3_600_000; // prices older than this are refreshed when a page needs them
 const RETRY_MS = 10 * 60_000;   // and not tried again sooner than this after a failure
+const weekBefore = date => new Date(Date.parse(`${date}T00:00:00Z`) - 7 * DAY_MS).toISOString().slice(0, 10);
 const nextDay = date => new Date(Date.parse(`${date}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 
 export async function updateMarketData(data, { fetch = globalThis.fetch, now = Date.now, log = console.log } = {}) {
     const today = new Date(now()).toISOString().slice(0, 10);
-    const [instruments, transactions, lastPrices, lastFx] = await Promise.all([
-        data.listInstruments(), data.listTransactions(), data.lastPriceDates(), data.lastFxDates(),
+    const [instruments, transactions, lastPrices, lastFx, settings] = await Promise.all([
+        data.listInstruments(), data.listTransactions(), data.lastPriceDates(), data.lastFxDates(), data.settings(),
     ]);
+    const benchmarkId = Number(settings.benchmark_instrument) || null;
     if (!transactions.length) return { prices: 0, rates: 0, problems: [] };
 
     const held = positions(transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId })));
@@ -29,14 +32,16 @@ export async function updateMarketData(data, { fetch = globalThis.fetch, now = D
     const currencies = new Set(transactions.flatMap(t => [t.currency, t.feeCurrency]).filter(Boolean));
     let prices = 0;
     for (const i of instruments) {
-        const sold = !held.get(i.id)?.units;
-        if (!firstDate.has(i.id) || i.priceSource === 'none' || (sold && lastPrices[i.id])) continue;
+        const benchmark = i.id === benchmarkId;
+        const sold = !held.get(i.id)?.units && !benchmark;
+        if ((!firstDate.has(i.id) && !benchmark) || i.priceSource === 'none' || (sold && lastPrices[i.id])) continue;
         let symbol = i.priceSymbol;
         if (!symbol) {
             symbol = suggestSymbol(i);
             await data.setPriceSymbol(i.id, symbol, 'yahoo');
         }
-        const from = lastPrices[i.id] ? nextDay(lastPrices[i.id]) : firstDate.get(i.id);
+        // The benchmark from a week before the first row, so money put in on a weekend has a price
+        const from = lastPrices[i.id] ? nextDay(lastPrices[i.id]) : firstDate.get(i.id) ?? weekBefore(transactions[0].date);
         if (!from || from > today) continue;
         try {
             const list = await fetchHistory(symbol, from, { fetch, now });

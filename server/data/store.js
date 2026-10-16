@@ -123,6 +123,12 @@ export function createDataStore(db) {
             [t.accountId, t.instrumentId, t.type, t.date, t.units, t.price, t.amount, t.currency, t.fee, t.feeCurrency, t.fxToEur, t.notes, id]),
         deleteTransaction: id => db.query('DELETE FROM transactions WHERE id = ?', [id]),
 
+        // ── Settings: { name: value } ──
+
+        settings: async () => Object.fromEntries((await rows('SELECT name, value FROM app_settings')).map(r => [r.name, r.value])),
+        setSetting: (name, value) => db.query(
+            'INSERT INTO app_settings (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)', [name, value]),
+
         // ── Allocation targets ──
 
         listGroups: async () => (await rows('SELECT * FROM allocation_groups ORDER BY position, id'))

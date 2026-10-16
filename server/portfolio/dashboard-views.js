@@ -66,15 +66,22 @@ const th = (label, numeric = false) => `<th scope="col"${numeric ? ' class="text
 const td = (html, numeric = false) => `<td${numeric ? ' class="text-end text-nowrap"' : ''}>${html}</td>`;
 
 // `total`: valuation total; `year`: reports.js year() for this year; `series`,
-// `income`: reports.js series() and income(); `groups`: reports.js total().groups or null
-export function dashboardContent({ total: t, year, series, income, groups, notices = [] }) {
+// `income`: reports.js series() and income(); `groups`: reports.js total().groups or null;
+// `benchmark`: { name, result } (benchmark.js, valued on the series' dates) or null
+export function dashboardContent({ total: t, year, series, income, groups, notices = [], benchmark = null }) {
     if (!series.length) {
         return `<h1 class="fs-3">Overview</h1>
 <p>Nothing recorded yet. <a href="/import">Import a statement</a> from Freedom24, Mintos or PeerBerry to start.</p>`;
     }
     const last = series.at(-1);
     const valueLabel = `Value and money put in at the end of each month, from ${monthName(series[0].month)} to ${monthName(last.month)}: now ${fixed(last.valueEur ?? 0n)} EUR against ${fixed(last.investedEur ?? 0n)} EUR put in. The figures are in the table below.`;
-    const valueRows = [...series].reverse().map(p => `                <tr>${td(esc(monthName(p.month)))}${td(eur(p.valueEur), true)}${td(eur(p.investedEur), true)}${td(p.valueEur === null || p.investedEur === null ? '—' : eur(p.valueEur - p.investedEur, true), true)}</tr>`).join('\n');
+    const b = benchmark?.result ? benchmark : null;
+    const benchValues = b ? b.result.series.map(p => p.value) : [];
+    const valueRows = [...series].map((p, i) => `                <tr>${td(esc(monthName(p.month)))}${td(eur(p.valueEur), true)}${td(eur(p.investedEur), true)}${td(p.valueEur === null || p.investedEur === null ? '—' : eur(p.valueEur - p.investedEur, true), true)}${b ? td(eur(benchValues[i] ?? null), true) : ''}</tr>`).reverse().join('\n');
+    const ahead = b && t.valueEur !== null && b.result.value !== null ? t.valueEur - b.result.value : null;
+    const comparison = !benchmark ? '<p><a href="/reports#benchmark-heading">Compare with a benchmark</a>, like an all-world ETF.</p>'
+        : !b ? `<p>No prices yet for your benchmark, ${esc(benchmark.name)}. <a href="/reports#benchmark-heading">Check it</a>.</p>`
+            : `<p>If every euro you put in had gone into ${esc(b.name)}, you'd have ${eur(b.result.value)} (${percent(b.result.xirr)} a year): you're ${ahead === null ? 'level' : `${eur(ahead < 0n ? -ahead : ahead)} ${ahead < 0n ? 'behind' : 'ahead'}`}. <a href="/reports#benchmark-heading">More</a></p>`;
 
     const recent = income.slice(-24);
     const incomeLabel = `P2P interest and dividends per month for the last ${recent.length} months. The figures are in the table below.`;
@@ -88,6 +95,7 @@ ${notices.join('\n')}
     <div><dt>Gain</dt><dd>${eur(t.gainEur, true)}</dd></div>
     <div><dt>Return a year</dt><dd>${percent(t.xirr)}</dd></div>
 </dl>
+${comparison}
 <h2 class="fs-5 mt-4">This year, so far</h2>
 <dl class="summary">
     <div><dt>Gain</dt><dd>${eur(year.gain, true)}</dd></div>
@@ -98,11 +106,15 @@ ${notices.join('\n')}
 <p><a href="/reports/${year.year}">This year in detail</a> · <a href="/reports">All years</a></p>
 
 <h2 class="fs-5 mt-4" id="value-heading">Value over time</h2>
-${chart('value-chart', valueLabel, {
+${chart('value-chart', b ? `${valueLabel} A dotted line shows the same money all in ${b.name}, now ${fixed(b.result.value ?? 0n)} EUR.` : valueLabel, {
         type: 'line', labels: series.map(p => monthName(p.month)),
-        series: [{ name: 'Value', values: series.map(p => amount(p.valueEur)) }, { name: 'Put in', values: series.map(p => amount(p.investedEur)) }],
+        series: [
+            { name: 'Value', values: series.map(p => amount(p.valueEur)) },
+            { name: 'Put in', values: series.map(p => amount(p.investedEur)) },
+            ...(b ? [{ name: `All in ${b.name}`, values: benchValues.map(amount) }] : []),
+        ],
     })}
-${figures('The figures, newest first', th('Month') + th('Value (EUR)', true) + th('Put in (EUR)', true) + th('Gain (EUR)', true), valueRows)}
+${figures('The figures, newest first', th('Month') + th('Value (EUR)', true) + th('Put in (EUR)', true) + th('Gain (EUR)', true) + (b ? th(`All in ${esc(b.name)} (EUR)`, true) : ''), valueRows)}
 
 <h2 class="fs-5 mt-4" id="income-heading">Income per month</h2>
 ${chart('income-chart', incomeLabel, {
