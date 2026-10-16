@@ -14,7 +14,8 @@ const colour = (name, i) => (name === 'Not in a group' ? OTHER : COLOURS[i % COL
 const percentLabel = value => `${Number(value).toFixed(1)}%`;
 const euros = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' });
 const euroLabel = value => euros.format(value).replace('-', '−');
-const roundEuros = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+// Axis labels: whole euros, with cents only when the steps are smaller than a euro
+const roundEuros = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 // Lines (value over time) or stacked bars (income) in euros
 function inEuros(canvas, data, line) {
