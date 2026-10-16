@@ -42,7 +42,7 @@ ${body}
 export const th = (label, numeric = false) => `<th scope="col"${numeric ? ' class="text-end"' : ''}>${label}</th>`;
 export const td = (html, numeric = false) => `<td${numeric ? ' class="text-end text-nowrap"' : ''}>${html}</td>`;
 const dividends = map => Object.entries(map).map(([c, v]) => money(v, c, { signed: true })).join('<br>') || '—';
-const instrumentCell = i => `<a href="/transactions?instrument=${i.id}">${esc(i.symbol)}</a><br><span class="small text-secondary-emphasis">${esc(i.name)}</span>`;
+const instrumentCell = i => `<a href="/holdings/${i.id}">${esc(i.symbol)}</a><br><span class="small text-secondary-emphasis">${esc(i.name)}</span>`;
 
 const NOTHING_YET = `<p>Nothing recorded yet. <a href="/import">Import a statement</a> to start.</p>`;
 

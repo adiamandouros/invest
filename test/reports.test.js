@@ -57,7 +57,7 @@ test('the CSV downloads', async () => {
     const r = await reportsOf(await fixture());
     const years = yearsCsv(r.years.map(r.year)).split('\r\n');
     assert.match(years[0], /^Year,From,To,Value at start \(EUR\)/);
-    assert.match(years[2], /^2024,2023-12-31,2024-12-31,0\.00,251\.00,21\.55,[\d.]+,272\.55,2\.55,0\.00,0\.00,0\.00,-1\.00$/);
+    assert.match(years[2], /^2024,2023-12-31,2024-12-31,0\.00,251\.00,21\.55,[\d.]+,272\.55,2\.55,0\.00,0\.00,0\.00,-1\.00,,$/, 'no inflation figures: the last two columns empty');
     assert.match(yearCsv(r.year(2025)), /\r\n"Cash, currency moves and fees",,,0\.00,\r\nTotal,272\.55,400\.00,37\.41,709\.96\r\n/);
 });
 

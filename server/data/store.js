@@ -123,6 +123,16 @@ export function createDataStore(db) {
             [t.accountId, t.instrumentId, t.type, t.date, t.units, t.price, t.amount, t.currency, t.fee, t.feeCurrency, t.fxToEur, t.notes, id]),
         deleteTransaction: id => db.query('DELETE FROM transactions WHERE id = ?', [id]),
 
+        // ── Consumer prices ──
+
+        listPriceIndex: async area => (await rows('SELECT month, index_value FROM price_index WHERE area = ? ORDER BY month', [area]))
+            .map(r => ({ month: r.month, index: r.index_value })),
+        async savePriceIndex(list) {
+            if (!list.length) return;
+            await db.query('INSERT INTO price_index (area, month, index_value) VALUES ? ON DUPLICATE KEY UPDATE index_value = VALUES(index_value)',
+                [list.map(r => [r.area, r.month, r.index])]);
+        },
+
         // ── Settings: { name: value } ──
 
         settings: async () => Object.fromEntries((await rows('SELECT name, value FROM app_settings')).map(r => [r.name, r.value])),

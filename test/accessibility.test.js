@@ -14,11 +14,13 @@ import { allocation } from '../server/lib/allocation.js';
 import { dec } from '../server/lib/decimal.js';
 import { summariseP2p } from '../server/lib/p2p.js';
 import { createReports } from '../server/lib/reports.js';
+import { createInflation } from '../server/lib/inflation.js';
 import { reportsContent, yearContent } from '../server/portfolio/reports-views.js';
 import { dashboardContent, dashboardNotices } from '../server/portfolio/dashboard-views.js';
 import { project } from '../server/lib/projection.js';
 import { projectionContent } from '../server/portfolio/projection-views.js';
 import { exportContent } from '../server/portfolio/export-views.js';
+import { instrumentContent } from '../server/portfolio/instrument-views.js';
 import { taxYear } from '../server/lib/tax.js';
 import { taxContent } from '../server/portfolio/tax-views.js';
 import { allocationContent, allocationForm } from '../server/portfolio/allocation-views.js';
@@ -114,14 +116,23 @@ const all = {
         t: taxYear({ transactions: [], accounts: new Map(), instruments: new Map(), eurPer: createRates([]), year: 2019, rate: dec('0.15') }),
         years: [2019], rateText: 'x', dividendRateText: 'y', errors: { rate: 'Enter a percentage from 0 to 100, like 15.', dividendRate: 'Enter a percentage from 0 to 100, like 15.' },
     })),
+    '/holdings/1': page('VUAA.EU', instrumentContent({
+        instrument: data.instruments[0], position: valuation.positions.find(p => p.instrument === 1) ?? null,
+        prices: [{ date: '2026-10-14', close: '149', currency: 'USD' }, { date: '2026-10-15', close: '149.5', currency: 'USD' }],
+        trades: data.transactions.filter(t => t.instrumentId === 1), averages: [{ date: '2022-01-25', average: 8000000000n }],
+    })),
+    '/holdings/9 (never held, no prices)': page('NEW', instrumentContent({
+        instrument: { id: 9, symbol: 'NEW', name: 'A new fund', isin: 'IE0000000000', kind: 'etf', currency: 'EUR' }, position: null, prices: [], trades: [], averages: [],
+    })),
     '/export': page('Export your data', exportContent({ counts: { accounts: 2, transactions: 40, prices: 1 } })),
     '/projection': page('Projection', projectionContent({
         history: reports.groupHistory(), thisYear: 2026, split: 'by your targets: P2P lending 100%',
         values: { years: '3', monthly: '100', 'rate-1': '7' },
         projection: project({ years: 3, monthlyAmount: 100, groups: [{ id: 1, name: 'P2P lending', value: 500, rate: 0.07, spread: 0.02, weight: 100 }] }),
+        plan: { goal: 10000, year: 2030, monthly: 150.2, safer: 171.9 },
     })),
     '/projection (errors)': page('Projection', projectionContent({
-        history: reports.groupHistory(), thisYear: 2026, values: { years: '0' }, errors: { years: 'Enter a whole number of years from 1 to 50.', 'rate-1': 'Enter a percentage.' },
+        history: reports.groupHistory(), thisYear: 2026, values: { years: '0', goal: 'x' }, errors: { years: 'Enter a whole number of years from 1 to 50.', 'rate-1': 'Enter a percentage.', goal: 'Enter the amount you want to reach.' },
     })),
     '/projection (empty)': page('Projection', projectionContent({ history: [], values: {}, thisYear: 2026 })),
     '/reports': render({ title: 'Reports', session, content: reportsContent({ total: { ...reports.total(), firstDate: reports.firstDate }, years: reports.years.map(reports.year) }) }),
@@ -133,6 +144,16 @@ const all = {
         total: valuation.total, year: reports.year(2026), series: reports.series(), income: reports.income(), groups: null,
         benchmark: { name: 'VWCE.DE', result: { value: 50000000000n, xirr: 0.08, series: reports.series().map(p => ({ date: p.date, value: 40000000000n })) } },
     })),
+    '/reports (inflation)': page('Reports', (() => {
+        const withPrices = createReports({
+            transactions: data.transactions, accounts: new Map(data.accounts.map(a => [a.id, a])), instruments: new Map(data.instruments.map(i => [i.id, i])),
+            balances: data.balances, groups: data.groups, today: '2026-10-15',
+            priceOf: createPrices([{ instrumentId: 1, date: '2026-10-15', close: '149.5', currency: 'USD' }]),
+            eurPer: createRates([{ currency: 'USD', date: '2022-01-03', perEur: '1.13' }]),
+            inflation: createInflation([{ month: '2021-12', index: '100' }, { month: '2025-12', index: '120' }]),
+        });
+        return reportsContent({ total: { ...withPrices.total(), firstDate: withPrices.firstDate }, years: withPrices.years.map(withPrices.year), csrf: 'token' });
+    })()),
     '/reports (empty)': page('Reports', reportsContent({ total: null, years: [] })),
     '/reports/2025': page('Report 2025', yearContent({ report: reports.year(2025), years: reports.years })),
     '/p2p': page('P2P lending', p2pListContent({ summaries: [p2pSummary] })),

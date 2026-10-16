@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fixed } from '../server/lib/decimal.js';
-import { project, spreadOf } from '../server/lib/projection.js';
+import { monthlyFor, project, spreadOf } from '../server/lib/projection.js';
 import { createReports } from '../server/lib/reports.js';
 import { createPrices, createRates } from '../server/lib/valuation.js';
 import { location, signUp, start } from './helpers/app.js';
@@ -93,4 +93,39 @@ test('over more years the range narrows: the spread over √years', () => {
     close(four.mid, 1000 * 1.07 ** 4);
     close(four.low, 1000 * 1.02 ** 4); // the spread halves over 4 years: 7% − 5%
     close(four.high, 1000 * 1.12 ** 4);
+});
+
+test('the monthly amount for a goal', () => {
+    const flat = [{ id: 1, name: 'A', value: 0, rate: 0, spread: 0.1, weight: 1 }];
+    close(monthlyFor({ groups: flat, years: 1, goal: 1200 }), 100);
+    const m = 1.12 ** (1 / 12) - 1;
+    const growing = [{ id: 1, name: 'A', value: 0, rate: 0.12, spread: null, weight: 1 }];
+    close(monthlyFor({ groups: growing, years: 1, goal: 1000 }), 1000 * m / ((1 + m) ** 12 - 1));
+    assert.equal(monthlyFor({ groups: [{ ...growing[0], value: 2000 }], years: 1, goal: 1000 }), 0, 'already there');
+    assert.equal(monthlyFor({ groups: [{ ...flat[0], weight: 0 }], years: 1, goal: 1000 }), null, 'nowhere to put it');
+    const safer = monthlyFor({ groups: [{ ...flat[0], rate: 0.07 }], years: 10, goal: 50_000, key: 'low' });
+    assert.ok(safer > monthlyFor({ groups: [{ ...flat[0], rate: 0.07 }], years: 10, goal: 50_000 }), 'the lower estimate needs more');
+});
+
+test('the goal on the projection page', async () => {
+    const app = await start({ data: await fixture() });
+    app.clock.now = Date.parse('2026-06-30T12:00:00Z');
+    try {
+        const b = app.browser();
+        await signUp(b, app.clock);
+        // 632.96 now, nothing growing: (3,632.96 − 632.96) / 24 months = 125
+        const html = await (await b.get('/projection?years=2&monthly=0&rate-1=0&rate-2=0&goal=3632.96&goalYear=2028')).text();
+        assert.match(html, /To reach €3,633 by 2028/);
+        assert.match(html, /<dt>Invest each month<\/dt><dd>€125<\/dd>/);
+        const there = await (await b.get('/projection?years=2&monthly=0&rate-1=0&rate-2=0&goal=500&goalYear=2028')).text();
+        assert.match(there, /You&#39;d get there without adding anything|You'd get there without adding anything/);
+        const bad = await b.get('/projection?years=2&monthly=0&rate-1=0&rate-2=0&goal=lots&goalYear=1999');
+        assert.equal(bad.status, 400);
+        const text = await bad.text();
+        assert.match(text, /Enter the amount you want to reach/);
+        assert.match(text, /Enter a year from 2027 to 2076/);
+        assert.doesNotMatch(await (await b.get('/projection')).text(), /To reach/, 'no goal, no goal section');
+    } finally {
+        app.close();
+    }
 });

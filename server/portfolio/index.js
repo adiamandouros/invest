@@ -5,9 +5,9 @@ import { allocation } from '../lib/allocation.js';
 import { benchmark } from '../lib/benchmark.js';
 import { backup, transactionsCsv } from '../lib/export.js';
 import { DEFAULT_DIVIDEND_RATE, DEFAULT_RATE, taxYear } from '../lib/tax.js';
-import { fixed } from '../lib/decimal.js';
+import { div, fixed } from '../lib/decimal.js';
 import { summariseP2p } from '../lib/p2p.js';
-import { project, spreadOf } from '../lib/projection.js';
+import { monthlyFor, project, spreadOf } from '../lib/projection.js';
 import { createReports } from '../lib/reports.js';
 import { createPrices, createRates, valuePortfolio } from '../lib/valuation.js';
 import { parseMultipart } from '../multipart.js';
@@ -22,6 +22,10 @@ import { dashboardContent, dashboardNotices } from './dashboard-views.js';
 import { exportContent } from './export-views.js';
 import { taxContent, taxCsv } from './tax-views.js';
 import { projectionContent } from './projection-views.js';
+import { instrumentContent } from './instrument-views.js';
+import { positions } from '../lib/holdings.js';
+import { createInflation } from '../lib/inflation.js';
+import { INFLATION_AREA } from '../market/update.js';
 import { CHART_SCRIPTS, reportsContent, yearContent, yearCsv, yearsCsv } from './reports-views.js';
 import { doneContent, holdingsContent, importContent, previewContent, transactionsContent, TYPE_LABELS } from './views.js';
 
@@ -93,6 +97,26 @@ export function createPortfolio({ data, market = null, render, send, message, no
         const updating = market ? await market.refreshIfStale() || market.running : false;
         const [{ accounts, instruments, valuation }, status] = await Promise.all([valueAll(), data.marketStatus()]);
         page(req, res, 'Holdings', holdingsContent({ valuation, instruments, accounts, status, updating, csrf: req.session.csrf }));
+    });
+
+    // One holding: its figures, price chart with your trades, and transactions
+    router.get('/holdings/:id', async (req, res, next) => {
+        const id = Number(req.params.id);
+        const instrument = await data.getInstrument(id);
+        if (!instrument) return next();
+        const [{ valuation }, prices] = await Promise.all([valueAll(), data.listPrices()]);
+        const trades = (await data.listTransactions({ instrumentId: id }));
+        // The average cost a unit after each buy or sale, in the instrument's currency
+        const ledger = trades.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId }));
+        const averages = trades.filter(t => ['buy', 'sell', 'shares_in', 'shares_out'].includes(t.type)).map(t => {
+            const p = positions(ledger.filter(r => r.date <= t.date)).get(id);
+            return { date: t.date, average: p && p.units > 0n ? div(p.cost, p.units) : 0n };
+        });
+        page(req, res, instrument.symbol, instrumentContent({
+            instrument, trades, averages,
+            position: valuation.positions.find(p => p.instrument === id) ?? null,
+            prices: prices.filter(p => p.instrumentId === id),
+        }), 200, CHART_SCRIPTS);
     });
 
     // Waits for the update (up to a minute), then shows the holdings again
@@ -182,7 +206,7 @@ export function createPortfolio({ data, market = null, render, send, message, no
         });
         const content = dashboardContent({
             total: valuation.total, year: series.length ? r.year(Number(today().slice(0, 4))) : null,
-            series, income: r.income(), groups: total?.groups ?? null, notices,
+            series, income: r.income(), groups: total?.groups ?? null, notices, realXirr: total?.realXirr ?? null,
             benchmark: series.length ? await compareWithBenchmark(series.map(p => p.date)) : null,
         });
         page(req, res, 'Overview', content, 200, series.length ? CHART_SCRIPTS : []);
@@ -228,12 +252,12 @@ export function createPortfolio({ data, market = null, render, send, message, no
     // ── Reports ─────────────────────────────────────────────────────────────
 
     async function reports() {
-        const [{ accounts, instruments, transactions }, prices, rates, balances, groups] = await Promise.all([
-            loadAll(), data.listPrices(), data.listFxRates(), data.listBalances(), data.listGroups(),
+        const [{ accounts, instruments, transactions }, prices, rates, balances, groups, priceIndex] = await Promise.all([
+            loadAll(), data.listPrices(), data.listFxRates(), data.listBalances(), data.listGroups(), data.listPriceIndex(INFLATION_AREA),
         ]);
         return createReports({
             transactions, accounts, instruments, balances, groups,
-            priceOf: createPrices(prices), eurPer: createRates(rates), today: today(),
+            priceOf: createPrices(prices), eurPer: createRates(rates), today: today(), inflation: createInflation(priceIndex),
         });
     }
     const download = (res, name, text) => {
@@ -276,7 +300,11 @@ export function createPortfolio({ data, market = null, render, send, message, no
         const keyOf = g => `rate-${g.id === null ? 'none' : g.id}`;
         // The first visit uses ten years, nothing more invested, and past returns
         const asked = req.query.years !== undefined;
-        const values = { years: asked ? String(req.query.years) : '10', monthly: asked ? String(req.query.monthly ?? '') : '0' };
+        const values = {
+            years: asked ? String(req.query.years) : '10', monthly: asked ? String(req.query.monthly ?? '') : '0',
+            goal: String(req.query.goal ?? ''), goalYear: String(req.query.goalYear ?? ''),
+            inflation: String(req.query.inflation ?? '2'),
+        };
         for (const g of history) values[keyOf(g)] = asked ? String(req.query[keyOf(g)] ?? '') : g.xirr === null ? '0' : (g.xirr * 100).toFixed(1);
 
         const errors = {};
@@ -294,6 +322,12 @@ export function createPortfolio({ data, market = null, render, send, message, no
         if (years !== null && !Number.isInteger(years)) errors.years = 'Enter a whole number of years from 1 to 50.';
         const monthly = read('monthly', 0, 10_000_000, 'Enter an amount, or 0.');
         const rates = history.map(g => read(keyOf(g), -50, 50, 'Enter a percentage from −50 to 50, like 7.'));
+        const inflation = read('inflation', -10, 50, 'Enter a percentage from −10 to 50, like 2.');
+        // An optional goal: an amount by a year
+        const wantsGoal = values.goal.trim() !== '' || values.goalYear.trim() !== '';
+        const goal = wantsGoal ? read('goal', 1, 100_000_000, 'Enter the amount you want to reach, like 100000.') : null;
+        const goalYear = wantsGoal ? read('goalYear', thisYear + 1, thisYear + 50, `Enter a year from ${thisYear + 1} to ${thisYear + 50}.`) : null;
+        if (goalYear !== null && !Number.isInteger(goalYear)) errors.goalYear = `Enter a year from ${thisYear + 1} to ${thisYear + 50}.`;
 
         // The monthly amount goes by the targets when they're set, otherwise by today's values
         const targeted = history.some(g => g.targetPct !== null)
@@ -303,14 +337,18 @@ export function createPortfolio({ data, market = null, render, send, message, no
             ? `by your targets: ${history.filter(g => g.targetPct !== null).map(g => `${g.name} ${Number(g.targetPct)}%`).join(', ')}`
             : 'in proportion to what each group is worth now';
 
-        const projection = Object.keys(errors).length || !history.length ? null : project({
-            years, monthlyAmount: monthly,
-            groups: history.map((g, i) => ({
-                id: g.id, name: g.name, value: Number(fixed(g.value ?? 0n)), rate: rates[i] / 100,
-                spread: spreadOf(g.years.map(y => y.rate)), weight: weightOf(g),
-            })),
-        });
-        page(req, res, 'Projection', projectionContent({ history, values, errors, projection, split, thisYear }),
+        const ok = !Object.keys(errors).length && history.length;
+        const groups = ok ? history.map((g, i) => ({
+            id: g.id, name: g.name, value: Number(fixed(g.value ?? 0n)), rate: rates[i] / 100,
+            spread: spreadOf(g.years.map(y => y.rate)), weight: weightOf(g),
+        })) : [];
+        const projection = ok ? project({ years, monthlyAmount: monthly, groups }) : null;
+        const plan = ok && wantsGoal ? {
+            goal, year: goalYear,
+            monthly: monthlyFor({ groups, years: goalYear - thisYear, goal }),
+            safer: monthlyFor({ groups, years: goalYear - thisYear, goal, key: 'low' }),
+        } : null;
+        page(req, res, 'Projection', projectionContent({ history, values, errors, projection, split, thisYear, plan, inflation: inflation === null ? 0 : inflation / 100 }),
             Object.keys(errors).length ? 400 : 200, projection ? CHART_SCRIPTS : []);
     });
 

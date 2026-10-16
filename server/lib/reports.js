@@ -30,7 +30,8 @@ export function inEur(row, eurPer) {
     return { amount: convert(row.amount, row.currency), fee: convert(row.fee, row.feeCurrency ?? row.currency) };
 }
 
-export function createReports({ transactions, accounts, instruments, balances, groups = [], priceOf, eurPer, today }) {
+// `inflation`: server/lib/inflation.js createInflation(), or null for no figures after it
+export function createReports({ transactions, accounts, instruments, balances, groups = [], priceOf, eurPer, today, inflation = null }) {
     const rows = transactions.map(t => ({ ...t, account: t.accountId, instrument: t.instrumentId }));
     const p2pAccounts = [...accounts.values()].filter(a => a.kind === 'p2p');
     const groupIds = new Set(groups.map(g => g.id));
@@ -183,7 +184,13 @@ export function createReports({ transactions, accounts, instruments, balances, g
     return {
         firstDate,
         years: firstYear === null ? [] : Array.from({ length: thisYear - firstYear + 1 }, (_, i) => thisYear - i),
-        year: year => ({ year, ...period(`${year - 1}-12-31`, yearEnd(year)) }),
+        year: year => {
+            const p = period(`${year - 1}-12-31`, yearEnd(year));
+            // Prices' rise over the year (so far), and the year's return less it
+            // Unknown (null) for a year with no published month yet
+            const prices = inflation && p.from.slice(0, 7) < inflation.lastMonth ? inflation.between(p.from, p.to) : null;
+            return { year, ...p, inflation: prices, realReturn: prices === null ? null : inflation.real(p.periodReturn, prices) };
+        },
         // The value and the money put in at the end of each month (the last one ends today)
         series: () => months().map(month => {
             const s = snapshot(monthEnd(month));
@@ -252,7 +259,14 @@ export function createReports({ transactions, accounts, instruments, balances, g
                 if (f === null) return { ...all, xirr: null };
                 if (f !== ZERO) flows.push({ date: r.date, amount: asNumber(f) });
             }
-            return { ...all, xirr: all.endValue === null ? null : xirr([...flows, { date: today, amount: asNumber(all.endValue) }]) };
+            const end = all.endValue === null ? null : { date: today, amount: asNumber(all.endValue) };
+            // After inflation: every flow in today's euros
+            const real = inflation && all.endValue !== null
+                ? xirr([...flows.map(f => ({ ...f, amount: f.amount * inflation.factor(f.date, today) })), end]) : null;
+            return {
+                ...all, xirr: all.endValue === null ? null : xirr([...flows, end]), realXirr: real,
+                inflation: inflation && firstDate ? inflation.between(firstDate, today) : null, inflationUntil: inflation?.lastMonth ?? null,
+            };
         },
     };
 }

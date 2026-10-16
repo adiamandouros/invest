@@ -111,7 +111,7 @@ const KIND_LABELS = { etf: 'ETF', stock: 'Stock', other: 'Other' };
 
 export function instrumentsContent({ instruments }) {
     const rows = instruments.map(i => `            <tr>
-                <td><a href="/transactions?instrument=${i.id}">${esc(i.symbol)}</a></td>
+                <td><a href="/holdings/${i.id}">${esc(i.symbol)}</a></td>
                 <td>${esc(i.name)}</td>
                 <td class="text-nowrap">${esc(i.isin ?? '—')}</td>
                 <td>${KIND_LABELS[i.kind]}</td>

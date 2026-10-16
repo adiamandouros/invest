@@ -68,7 +68,7 @@ const td = (html, numeric = false) => `<td${numeric ? ' class="text-end text-now
 // `total`: valuation total; `year`: reports.js year() for this year; `series`,
 // `income`: reports.js series() and income(); `groups`: reports.js total().groups or null;
 // `benchmark`: { name, result } (benchmark.js, valued on the series' dates) or null
-export function dashboardContent({ total: t, year, series, income, groups, notices = [], benchmark = null }) {
+export function dashboardContent({ total: t, year, series, income, groups, notices = [], benchmark = null, realXirr = null }) {
     if (!series.length) {
         return `<h1 class="fs-3">Overview</h1>
 <p>Nothing recorded yet. <a href="/import">Import a statement</a> from Freedom24, Mintos or PeerBerry to start.</p>`;
@@ -93,7 +93,7 @@ ${notices.join('\n')}
     <div><dt>Value now</dt><dd>${eur(t.valueEur)}</dd></div>
     <div><dt>Put in</dt><dd>${eur(t.investedEur)}</dd></div>
     <div><dt>Gain</dt><dd>${eur(t.gainEur, true)}</dd></div>
-    <div><dt>Return a year</dt><dd>${percent(t.xirr)}</dd></div>
+    <div><dt>Return a year</dt><dd>${percent(t.xirr)}${realXirr === null ? '' : `<br><span class="small text-secondary-emphasis">${percent(realXirr)} after inflation</span>`}</dd></div>
 </dl>
 ${comparison}
 <h2 class="fs-5 mt-4">This year, so far</h2>

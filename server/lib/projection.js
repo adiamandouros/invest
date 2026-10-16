@@ -45,3 +45,20 @@ export function project({ groups, monthlyAmount = 0, years }) {
         return { year, contributed: added * 12 * year, groups: rows, total: { low: total('low'), mid: total('mid'), high: total('high') } };
     });
 }
+
+// The monthly amount that brings the total to `goal` in `years`, with the
+// expected returns (`key` 'mid') or the lower estimate ('low'): 0 when it gets
+// there without adding anything, null when no amount would (nothing to add it to).
+export function monthlyFor({ groups, years, goal, key = 'mid' }) {
+    const reach = amount => project({ groups, years, monthlyAmount: amount }).at(-1).total[key];
+    if (reach(0) >= goal) return 0;
+    if (!groups.some(g => g.weight > 0)) return null;
+    let low = 0;
+    let high = goal / (years * 12) + 1;
+    while (reach(high) < goal) high *= 2;
+    for (let i = 0; i < 60; i++) {
+        const mid = (low + high) / 2;
+        if (reach(mid) < goal) low = mid; else high = mid;
+    }
+    return high;
+}
