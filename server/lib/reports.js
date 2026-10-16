@@ -18,7 +18,7 @@ const sumOf = list => list.reduce(plus, ZERO);
 const asNumber = value => Number(fixed(value, 2));
 
 // EUR of a row's amount and of its fee, at its own rate or the ECB's on the day
-function inEur(row, eurPer) {
+export function inEur(row, eurPer) {
     const rate = currency => (currency === 'EUR' ? ONE
         : currency === row.currency && row.fxToEur !== null && row.fxToEur !== undefined ? dec(row.fxToEur) : eurPer(currency, row.date));
     const convert = (value, currency) => {
