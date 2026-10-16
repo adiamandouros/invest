@@ -128,9 +128,10 @@ const all = {
         history: reports.groupHistory(), thisYear: 2026, split: 'by your targets: P2P lending 100%',
         values: { years: '3', monthly: '100', 'rate-1': '7' },
         projection: project({ years: 3, monthlyAmount: 100, groups: [{ id: 1, name: 'P2P lending', value: 500, rate: 0.07, spread: 0.02, weight: 100 }] }),
+        plan: { goal: 10000, year: 2030, monthly: 150.2, safer: 171.9 },
     })),
     '/projection (errors)': page('Projection', projectionContent({
-        history: reports.groupHistory(), thisYear: 2026, values: { years: '0' }, errors: { years: 'Enter a whole number of years from 1 to 50.', 'rate-1': 'Enter a percentage.' },
+        history: reports.groupHistory(), thisYear: 2026, values: { years: '0', goal: 'x' }, errors: { years: 'Enter a whole number of years from 1 to 50.', 'rate-1': 'Enter a percentage.', goal: 'Enter the amount you want to reach.' },
     })),
     '/projection (empty)': page('Projection', projectionContent({ history: [], values: {}, thisYear: 2026 })),
     '/reports': render({ title: 'Reports', session, content: reportsContent({ total: { ...reports.total(), firstDate: reports.firstDate }, years: reports.years.map(reports.year) }) }),
