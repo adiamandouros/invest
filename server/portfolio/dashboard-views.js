@@ -14,9 +14,13 @@ const monthName = month => new Date(`${month}-01T00:00:00Z`).toLocaleString('en-
 const DAY_MS = 86_400_000;
 const ageInDays = (date, today) => Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / DAY_MS);
 
+// How far a group may be from its target, in percentage points, before the overview says so
+export const DRIFT_POINTS = 5;
+
 // What needs a look, as alert HTML. `valuation`: valuation.js valuePortfolio();
-// `status`: market_updates; `p2p`: [{ account, lastDate }]; `unassigned`: holdings in no group
-export function dashboardNotices({ valuation: v, instruments, status = {}, updating = false, p2p = [], unassigned = [], today }) {
+// `status`: market_updates; `p2p`: [{ account, lastDate }]; `unassigned`: holdings in no group;
+// `allocation`: allocation.js allocation(), for groups that drifted from their targets
+export function dashboardNotices({ valuation: v, instruments, status = {}, updating = false, p2p = [], unassigned = [], allocation = null, today }) {
     const notices = [];
     if (updating) notices.push('<div class="alert alert-info" role="status">Updating prices and exchange rates. Reload the page in a minute to see them.</div>');
     const failed = Object.values(status).filter(s => !s.ok && s.message);
@@ -30,6 +34,15 @@ export function dashboardNotices({ valuation: v, instruments, status = {}, updat
     const old = p2p.filter(p => p.lastDate && ageInDays(p.lastDate, today) > 40);
     if (old.length) {
         notices.push(`<div class="alert alert-info" role="status">${old.map(p => `${esc(p.account.name)}'s newest row is from ${esc(p.lastDate)}`).join('; ')}. <a href="/import">Import a newer statement</a> to bring ${old.length === 1 ? 'it' : 'them'} up to date.</div>`);
+    }
+    const drifted = allocation?.ready
+        ? allocation.groups.filter(g => g.share !== null && Math.abs(g.share * 100 - Number(g.targetPct) / 1e8) > DRIFT_POINTS) : [];
+    if (drifted.length) {
+        const describe = g => {
+            const points = g.share * 100 - Number(g.targetPct) / 1e8;
+            return `${esc(g.name)} is at ${(g.share * 100).toFixed(1)}% against a ${Number(g.targetPct) / 1e8}% target (${points > 0 ? '+' : '−'}${Math.abs(points).toFixed(1)} points)`;
+        };
+        notices.push(`<div class="alert alert-warning" role="alert">Your allocation has drifted: ${drifted.map(describe).join('; ')}. <a href="/allocation">See how to split your next investment</a> to bring it back.</div>`);
     }
     if (unassigned.length) {
         notices.push(`<div class="alert alert-info" role="status">Not in an allocation group: ${unassigned.map(i => esc(i.name)).join(', ')}. <a href="/allocation/edit">Choose their groups</a>.</div>`);

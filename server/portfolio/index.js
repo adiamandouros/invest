@@ -177,6 +177,7 @@ export function createPortfolio({ data, market = null, render, send, message, no
         const notices = dashboardNotices({
             valuation, instruments, status, updating, p2p, today: today(),
             unassigned: groups.length ? holdings.filter(h => !groups.some(g => g.id === h.groupId)) : [],
+            allocation: groups.length ? allocation({ groups, items: holdings }) : null,
         });
         const content = dashboardContent({
             total: valuation.total, year: series.length ? r.year(Number(today().slice(0, 4))) : null,

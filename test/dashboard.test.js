@@ -80,3 +80,17 @@ test('the overview page', async () => {
         empty.close();
     }
 });
+
+test('a group more than 5 points from its target is pointed out', async () => {
+    const { allocation } = await import('../server/lib/allocation.js');
+    const { dec } = await import('../server/lib/decimal.js');
+    const groups = [{ id: 1, name: 'S&P 500', targetPct: '60' }, { id: 2, name: 'International', targetPct: '10' }, { id: 3, name: 'P2P', targetPct: '30' }];
+    const items = values => values.map(([groupId, v], i) => ({ key: `k${i}`, name: `k${i}`, groupId, valueEur: dec(v) }));
+    const notices = a => dashboardNotices({ valuation: { missingPrices: [], pricesAsOf: null }, instruments: new Map(), today: '2026-10-16', allocation: a }).join('');
+
+    const drifted = notices(allocation({ groups, items: items([[1, '67'], [2, '19'], [3, '14']]) }));
+    assert.match(drifted, /Your allocation has drifted: S&amp;P 500 is at 67\.0% against a 60% target \(\+7\.0 points\); International is at 19\.0% against a 10% target \(\+9\.0 points\); P2P is at 14\.0% against a 30% target \(−16\.0 points\)/);
+    assert.match(drifted, /href="\/allocation">See how to split your next investment/);
+    assert.equal(notices(allocation({ groups, items: items([[1, '64'], [2, '10'], [3, '26']]) })), '', 'within 5 points: nothing to say');
+    assert.equal(notices(allocation({ groups: [{ ...groups[0], targetPct: '50' }], items: items([[1, '1']]) })), '', 'targets that don\'t add up: not ready');
+});
